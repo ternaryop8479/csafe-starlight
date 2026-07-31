@@ -2,7 +2,7 @@
  * @file feat_pack.h
  * @brief 程序的特征数据集合数据结构封装
  * @author ternaryop8479
- * @date 2026-07-30
+ * @date 2026-07-31
  */
 
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_BASIC_FEAT_PACK_H

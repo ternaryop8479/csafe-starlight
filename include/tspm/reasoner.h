@@ -2,7 +2,7 @@
  * @file tspm/reasoner.h
  * @brief tosSPM模型推理引擎接口声明
  * @author ternaryop8479
- * @date 2026-07-29
+ * @date 2026-07-31
  */
 
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_TSPM_REASONER_H

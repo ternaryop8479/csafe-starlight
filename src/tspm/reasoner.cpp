@@ -2,7 +2,7 @@
  * @file tspm/reasoner.cpp
  * @brief tosSPM模型推理接口实现
  * @author ternaryop8479
- * @date 2026-07-29
+ * @date 2026-07-31
  */
 
 #include "tspm/reasoner.h"
