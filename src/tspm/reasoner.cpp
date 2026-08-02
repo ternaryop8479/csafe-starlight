@@ -132,6 +132,8 @@ Reasoner::DFSData Reasoner::dfs_risk_score(const EFG &efg, bool enable_record_ev
 		current_evtree_node = std::make_shared<EvidenceTree>();
 		current_evtree_node->api_name = efg.api_table_.query_api(efg.nodes_[current_efg_node]).second; // 记录API名
 		current_evtree_node->weight = model_.nodes[matched_trie_node].weight; // 记录该Trie树节点的权重
+		current_evtree_node->is_skipped = false; // 标记当前节点不是被跳过的节点(有匹配)
+		current_evtree_node->node_index_in_efg = current_efg_node; // 标记当前节点在EFG中的节点下标
 	}
 
 	// 要用来传入dfs参数的current_trie_node，不匹配就用current_trie_node，反之用匹配到的trie_node
@@ -148,8 +150,12 @@ Reasoner::DFSData Reasoner::dfs_risk_score(const EFG &efg, bool enable_record_ev
 		// 检查当前dfs是否挖掘到结果(只要当前dfs出来的节点不是nullptr就一定挖到了节点)且允许记录dfs树
 		if (enable_record_evidence && current_dfs_data.current_tree != nullptr) {
 			// 首先确保分配了内存
-			if (current_evtree_node == nullptr) {
+			if (current_evtree_node == nullptr) { // 能走到这一步必然说明当前节点是被跳过的节点
 				current_evtree_node = std::make_shared<EvidenceTree>();
+				current_evtree_node->api_name = efg.api_table_.query_api(efg.nodes_[current_efg_node]).second; // 写入当前节点的API名
+				current_evtree_node->weight = 0.0; // 写入当前节点的权重
+				current_evtree_node->is_skipped = true; // 标记当前节点是被跳过的节点
+				current_evtree_node->node_index_in_efg = current_efg_node; // 标记当前节点在EFG中的节点下标
 			}
 
 			// 将该dfs返回的节点接入为当前节点的子节点

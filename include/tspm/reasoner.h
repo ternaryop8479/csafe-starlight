@@ -19,19 +19,21 @@ namespace starlight_v3::tspm {
  * @brief 模型推理过程中的证据树(即dfs树)
  */
 struct EvidenceTree {
-	std::string api_name;
-	double weight;
-	std::vector<std::shared_ptr<EvidenceTree>> sub_nodes;
+	std::string api_name; ///< 当前节点接口名称
+	double weight; ///< 当前节点权重(为0则代表当前节点属于该链条中不含权重的中间节点或被跳过的节点)
+	SIZE_T node_index_in_efg; ///< 当前匹配节点在EFG nodes数组中的下标
+	bool is_skipped = false; ///< 用于标记当前节点是否是被跳过的节点
+	std::vector<std::shared_ptr<EvidenceTree>> sub_nodes; ///< 子节点列表
 };
 
 /**
  * @brief 模型输出的推理结果，包含推理链和各维度评估分数等
  */
 struct AnalysisResult {
-	std::vector<std::shared_ptr<EvidenceTree>> evidence_trees;
-	double final_score = 0.0;
-	double malware_score = 0.0;
-	double benign_score = 0.0;
+	std::vector<std::shared_ptr<EvidenceTree>> evidence_trees; ///< 推理证据树
+	double final_score = 0.0; ///< 模型输出的最终评分
+	double malware_score = 0.0; ///< 模型的风险评分
+	double benign_score = 0.0; ///< 模型的良性评分
 };
 
 class Reasoner {
