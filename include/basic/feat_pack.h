@@ -2,7 +2,7 @@
  * @file feat_pack.h
  * @brief 程序的特征数据集合数据结构封装
  * @author ternaryop8479
- * @date 2026-07-31
+ * @date 2026-08-02
  */
 
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_BASIC_FEAT_PACK_H
@@ -119,10 +119,10 @@ struct EFGFeatPack {
 };
 
 /**
- * @brief 来自程序PE文件的结构化统计特征
+ * @brief 来自程序PE文件的结构化统计特征(共89维)
  */
 struct PEFeatPack {
-	// PE头数据特征
+	// PE头数据特征(29维)
 	SIZE_T machine_type; ///< 机器类型(IMAGE_FILE_HEADER.Machine)
 	bool is_64bit; ///< 是否为PE32+格式
 	SIZE_T num_sections; ///< 节段数量(NumberOfSections)
@@ -153,7 +153,7 @@ struct PEFeatPack {
 	GREAT_SIZE_T size_of_heap_commit; ///< 堆提交大小
 	SIZE_T number_of_rva_and_sizes; ///< 数据目录条目数
 
-	// 节段熵特征
+	// 节段熵特征(7维)
 	double file_entropy; ///< 整个文件的Shannon熵
 	double section_entropy_mean; ///< 各节段熵的均值
 	double section_entropy_max; ///< 各节段熵的最大值
@@ -162,7 +162,7 @@ struct PEFeatPack {
 	double text_section_entropy; ///< .text节段的熵
 	SIZE_T high_entropy_section_count; ///< 熵大于7.2的节段数(加壳信号)
 
-	// 节段统计特征
+	// 节段统计特征(12维)
 	SIZE_T entry_section_index; ///< 入口点所在节段的下标
 	double entry_section_entropy; ///< 入口点所在节段的熵
 	double raw_size_mean; ///< 各节段SizeOfRawData均值
@@ -176,7 +176,7 @@ struct PEFeatPack {
 	SIZE_T writable_executable_count; ///< 可写可执行(W+X)节段数(经典可疑特征)
 	SIZE_T executable_count; ///< 可执行节段数
 
-	// 导入表统计特征
+	// 导入表统计特征(21维)
 	SIZE_T import_count; ///< 导入函数总数
 	SIZE_T distinct_dll_count; ///< 导入的不同DLL数
 	double imports_per_dll_mean; ///< 每个DLL平均导入函数数
@@ -199,7 +199,7 @@ struct PEFeatPack {
 	SIZE_T persistence_api_count; ///< 持久化类API数(注册表/服务/自启动等)
 	SIZE_T import_dir_size; ///< 导入表数据目录大小
 
-	// 字符串特征
+	// 字符串特征(10维)
 	SIZE_T string_count; ///< 可打印字符串总数
 	double string_avg_len; ///< 字符串平均长度
 	SIZE_T string_max_len; ///< 字符串最大长度
@@ -211,7 +211,7 @@ struct PEFeatPack {
 	SIZE_T ip_count; ///< 包含IP地址的字符串数
 	SIZE_T suspicious_keyword_count; ///< 包含可疑关键词的字符串数
 
-	// 结构统计特征
+	// 结构统计特征(10维)
 	SIZE_T file_size; ///< 文件总大小
 	SIZE_T overlay_size; ///< 文件尾部附加数据大小(最后一个节段之后的数据)
 	double overlay_ratio; ///< 附加数据占文件大小比例
@@ -224,6 +224,9 @@ struct PEFeatPack {
 	SIZE_T rich_header_entry_count; ///< Rich Header条目数(编译器指纹)
 };
 
+/**
+ * @brief 所有维度的特征集合(共171维)
+ */
 struct FeatPack {
 	// 来自tosSPM引擎推理过程及结果的特征数据
 	TSPMFeatPack tspm_feats;
