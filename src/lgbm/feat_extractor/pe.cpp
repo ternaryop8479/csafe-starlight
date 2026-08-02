@@ -855,10 +855,10 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 	if (pe->fileBuffer != nullptr) {
 		file_size = pe->fileBuffer->bufLen;
 	}
-	feats.file_size = (SIZE_T)file_size;
+	feats.file_size = file_size;
 	feats.file_entropy = (pe->fileBuffer != nullptr && pe->fileBuffer->buf != nullptr && file_size > 0)
 		? shannon_entropy(pe->fileBuffer->buf, (size_t)file_size) : 0.0;
-	feats.overlay_size = file_size > raw_end_max ? (SIZE_T)(file_size - raw_end_max) : 0;
+	feats.overlay_size = file_size > raw_end_max ? (GREAT_SIZE_T)(file_size - raw_end_max) : 0;
 	feats.overlay_ratio = file_size > 0 ? (double)feats.overlay_size / (double)file_size : 0.0;
 	feats.headers_image_ratio = (opt.valid && opt.size_of_image > 0) ? (double)opt.size_of_headers / (double)opt.size_of_image : 0.0;
 	if (opt.valid && opt.size_of_image > 0) {

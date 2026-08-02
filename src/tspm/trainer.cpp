@@ -32,6 +32,9 @@ Trainer::Trainer(const TrainingConfig &config, std::function<void(const std::str
 
 // 训练接口
 Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign_dataset) {
+	// 先清空call_chain_list_确保上一轮训练的数据被正确清除
+	call_chain_list_.clear();
+
 	// 总耗时计时
 	auto total_begin = std::chrono::steady_clock::now();
 
@@ -51,9 +54,11 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 
 	// 先合并两个数据集的api_table，生成一个大table(这里注意还要修改两个数据集里nodes的api_id)，同时生成两个数据集的1-gram投影表
 	std::vector<std::pair<APIID_T, ProjectionList>> malware_proj_list, benign_proj_list; // 本地病毒/白文件投影表
-	for (int i = 0; i < malware_dataset.size(); ++i) { // 先遍历病毒数据集
-		EFG &efg = malware_dataset[i];
-		for (int j = 0; j < efg.nodes_.size(); ++j) { // 遍历EFG中所有节点
+	std::vector<SIZE_T> malware_api_weight, benign_api_weight; // 病毒/良性样本的权重
+	for (SIZE_T i = 0; i < malware_dataset.size(); ++i) { // 先遍历病毒数据集
+		EFG &efg = malware_dataset[i]; // Alias for malware_dataset[i]
+		std::vector<bool> visited; // 用于标记当前api是否访问
+		for (SIZE_T j = 0; j < efg.nodes_.size(); ++j) { // 遍历EFG中所有节点
 			APIID_T &node = efg.nodes_[j];
 			// 查询API字符串并将字符串插入api_table_
 			const auto &[found, api_str] = efg.api_table_.query_api(node);
@@ -72,14 +77,25 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 			}
 			malware_proj_list[api_id].first = api_id; // 在投影生成阶段，malware_proj_list的索引对应为API_ID，直到排序阶段无实际意义
 			malware_proj_list[api_id].second.emplace_back(proj);
+			if (visited.size() <= api_id) { // 检查当前visited大小
+				visited.resize(api_id + 1, false);
+			}
+			if(!visited[api_id]) { // 如果未记录过当前API则进行记录
+				visited[api_id] = true; // 访问标记
+				if(malware_api_weight.size() <= api_id) { // 扩容malware_api_weight
+					malware_api_weight.resize(api_id + 1, 0);
+				}
+				++malware_api_weight[api_id];
+			}
 
 			// 修改数据集节点的api_id
 			node = api_id;
 		}
 	}
-	for (int i = 0; i < benign_dataset.size(); ++i) { // 遍历白数据集
-		EFG &efg = benign_dataset[i];
-		for (int j = 0; j < efg.nodes_.size(); ++j) { // 遍历EFG中所有节点
+	for (SIZE_T i = 0; i < benign_dataset.size(); ++i) { // 遍历白数据集
+		EFG &efg = benign_dataset[i]; // Alias for malware_dataset[i]
+		std::vector<bool> visited; // 用于标记当前api是否访问
+		for (SIZE_T j = 0; j < efg.nodes_.size(); ++j) { // 遍历EFG中所有节点
 			APIID_T &node = efg.nodes_[j];
 			// 查询API字符串并将字符串插入api_table_
 			const auto &[found, api_str] = efg.api_table_.query_api(node);
@@ -96,8 +112,18 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 			if (benign_proj_list.size() <= api_id) { // 检查当前投影集大小
 				benign_proj_list.resize(api_id + 1);
 			}
-			benign_proj_list[api_id].first = api_id; // 在投影生成阶段，malware_proj_list的索引对应为API_ID，直到排序阶段无实际意义
+			benign_proj_list[api_id].first = api_id; // 在投影生成阶段，benign_proj_list的索引对应为API_ID，直到排序阶段无实际意义
 			benign_proj_list[api_id].second.emplace_back(proj);
+			if (visited.size() <= api_id) { // 检查当前visited大小
+				visited.resize(api_id + 1, false);
+			}
+			if(!visited[api_id]) { // 如果未记录过当前API则进行记录
+				visited[api_id] = true; // 访问标记
+				if(benign_api_weight.size() <= api_id) { // 扩容benign_api_weight
+					benign_api_weight.resize(api_id + 1, 0);
+				}
+				++benign_api_weight[api_id];
+			}
 
 			// 修改数据集节点的api_id
 			node = api_id;
@@ -107,6 +133,11 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 	// 根据用户输入配置里用字符串存储的banned_apis生成banned_apis_成员变量(存储API ID)
 	for (const std::string &api : config_.banned_apis) {
 		banned_apis_.insert(model.api_table.query_id(api).second);
+	}
+
+	// 忽略掉不存在于解析列表中的API
+	if(banned_apis_.count(INVALID_NUM)) {
+		banned_apis_.erase(INVALID_NUM);
 	}
 
 	// 计时
@@ -150,7 +181,7 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 		}
 
 		// 检查根节点支持度
-		if (proj_list.size() > malware_dataset.size() * config_.max_root_support || proj_list.size() < min_count_) {
+		if (malware_api_weight[api_id] > malware_dataset.size() * config_.max_root_support || malware_api_weight[api_id] < min_count_) {
 			continue;
 		}
 
@@ -166,10 +197,10 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 			current_data.current_prefix_.emplace_back(api_id);
 
 			// 将1-gram API数据写入数据集
-			if (proj_list.size() <= max_count_) { // 因为max_root_support和max_support不是一个参数，所以这里需要单独特判
+			if (malware_api_weight[api_id] <= max_count_) { // 因为max_root_support和max_support不是一个参数，所以这里需要单独特判
 				CallChain root_node;
 				root_node.api_chain = current_data.current_prefix_;
-				root_node.weight = proj_list.size();
+				root_node.weight = malware_api_weight[api_id];
 				current_call_chain_list_mutex_.lock();
 				current_call_chain_list_.push_back(root_node);
 				current_call_chain_list_mutex_.unlock();
@@ -217,7 +248,7 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 			continue;
 		}
 		// 检查根节点支持度
-		if (proj_list.size() > benign_dataset.size() * config_.max_root_support || proj_list.size() < min_count_) {
+		if (benign_api_weight[api_id] > benign_dataset.size() * config_.max_root_support || benign_api_weight[api_id] < min_count_) {
 			continue;
 		}
 
@@ -233,10 +264,10 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 			current_data.current_prefix_.emplace_back(api_id);
 
 			// 将1-gram API数据写入数据集
-			if (proj_list.size() <= max_count_) { // 因为max_root_support和max_support不是一个参数，所以这里需要单独特判
+			if (benign_api_weight[api_id] <= max_count_) { // 因为max_root_support和max_support不是一个参数，所以这里需要单独特判
 				CallChain root_node;
 				root_node.api_chain = current_data.current_prefix_;
-				root_node.weight = proj_list.size();
+				root_node.weight = benign_api_weight[api_id];
 				current_call_chain_list_mutex_.lock();
 				current_call_chain_list_.push_back(root_node);
 				current_call_chain_list_mutex_.unlock();
@@ -323,7 +354,7 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 
 	// 排序调用链
 	std::sort(call_chain_list_.begin(), call_chain_list_.end(), [](const CallChain &chain1, const CallChain &chain2) -> bool {
-		for (int i = 0; i < std::min(chain1.api_chain.size(), chain2.api_chain.size()); ++i) {
+		for (SIZE_T i = 0; i < std::min(chain1.api_chain.size(), chain2.api_chain.size()); ++i) {
 			if (chain1.api_chain[i] != chain2.api_chain[i]) {
 				return chain1.api_chain[i] < chain2.api_chain[i];
 			}
@@ -351,7 +382,7 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 		{ .weight = 0.0,
 			.depth = -1, // 设置成-1就不需要做各种头疼的depth->index转换了
 			.node_begin = 0,
-			.node_end = static_cast<SIZE_T>(call_chain_list_.size() - 1),
+			.node_end = static_cast<SIZE_T>(call_chain_list_.size() - 1), // 注意！这里call_chain_list_大小为0的时候会崩溃，此处的崩溃设计不是bug，而是代码设计，用于提醒用户数据集出现问题
 			.node_index = 0 });
 
 	// 计时

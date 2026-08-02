@@ -140,16 +140,24 @@ bool PEParser::parse() {
 	if (!peparse::GetEntryPoint(impl_->pe_, entry_va))
 		return false;
 
-	impl_->image_base_ = impl_->pe_->peHeader.nt.OptionalHeader.ImageBase;
+	// 先判定PE格式再取image_base: PE32+的ImageBase在OptionalHeader64中是64位字段,
+	// 若按PE32结构读取会把高32位截断, 导致入口/导入RVA全部算错
+	impl_->is_64bit_ = (impl_->pe_->peHeader.nt.OptionalMagic == 0x20b);
+	impl_->image_base_ = impl_->is_64bit_
+		? impl_->pe_->peHeader.nt.OptionalHeader64.ImageBase
+		: impl_->pe_->peHeader.nt.OptionalHeader.ImageBase;
 	impl_->entry_point_rva_ = entry_va - impl_->image_base_;
-	impl_->is_64bit_ = (impl_->pe_->peHeader.nt.OptionalHeader.Magic == 0x20b);
 
 	try {
 		peparse::IterImpVAString(impl_->pe_, &Impl::import_callback, impl_.get());
 	} catch (const std::range_error &e) {
 		// 如果解析到一半出错了，就保留已经解析出来的导入表
 	}
-	peparse::IterSec(impl_->pe_, &Impl::section_callback, impl_.get());
+	try {
+		peparse::IterSec(impl_->pe_, &Impl::section_callback, impl_.get());
+	} catch (const std::range_error &e) {
+		// 如果解析到一半出错了，就保留已经解析出来的节段
+	}
 	return true;
 }
 
@@ -467,6 +475,11 @@ bool EFGBuilder::Impl::decode_at(
 	for (const auto &sec : parser_.get_exec_sections()) {
 		if (rva >= sec.base_rva_ && rva < sec.base_rva_ + sec.size_) {
 			size_t offset = rva - sec.base_rva_;
+			// VirtualSize > SizeOfRawData 的节段(虚拟填充/.bss/截断文件)可能没有原始字节,
+			// 此时 data()+offset 越过缓冲区、size()-offset 下溢, 必须拒绝
+			if (offset >= sec.bytes_.size()) {
+				return false;
+			}
 			return ZYAN_SUCCESS(ZydisDecoderDecodeFull(
 				&decoder_,
 				sec.bytes_.data() + offset,

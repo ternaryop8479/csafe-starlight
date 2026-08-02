@@ -83,8 +83,8 @@ struct EFGFeatPack {
 	double degree_var; ///< 图出度方差
 	double degree_ske; ///< 图出度偏度
 	double edge_node_ratio; ///< 边数/节点比
-	SIZE_T isolated_node_count; ///< 孤立节点数(即连通分量数-1)
-	double largest_component_ratio; ///< 最大连通分量占比(包含ENTRY节点的连通分量节点数占全图总节点数之比)
+	SIZE_T isolated_node_count; ///< 孤立节点数(出度为0的sink节点数)
+	double largest_component_ratio; ///< ENTRY主链占比(从ENTRY节点沿出边可达的节点数占全图总节点数之比)
 	double entropy; ///< 图的结构熵
 
 	// EFG的边信息数据(28维)
@@ -212,8 +212,8 @@ struct PEFeatPack {
 	SIZE_T suspicious_keyword_count; ///< 包含可疑关键词的字符串数
 
 	// 结构统计特征(10维)
-	SIZE_T file_size; ///< 文件总大小
-	SIZE_T overlay_size; ///< 文件尾部附加数据大小(最后一个节段之后的数据)
+	GREAT_SIZE_T file_size; ///< 文件总大小
+	GREAT_SIZE_T overlay_size; ///< 文件尾部附加数据大小(最后一个节段之后的数据)
 	double overlay_ratio; ///< 附加数据占文件大小比例
 	double headers_image_ratio; ///< SizeOfHeaders/SizeOfImage
 	double image_gap_ratio; ///< 映像空隙比例((SizeOfImage - 各节VirtualSize之和)/SizeOfImage)

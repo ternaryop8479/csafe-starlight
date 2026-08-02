@@ -5,8 +5,8 @@
  * @date 2026-07-09
  */
 
-#ifndef CSAFE_STARLIGHT_V3_INCLUDE_EFG_H
-#define CSAFE_STARLIGHT_V3_INCLUDE_EFG_H
+#ifndef CSAFE_STARLIGHT_V3_INCLUDE_BASIC_EFG_H
+#define CSAFE_STARLIGHT_V3_INCLUDE_BASIC_EFG_H
 
 #include <string>
 #include <unordered_map>
@@ -21,7 +21,7 @@ namespace starlight_v3 {
  * @brief 程序的边数据结构体
  */
 struct EFGEdge {
-	uint64_t to_node_index;
+	SIZE_T to_node_index = 0;
 	SIZE_T jump_count = 0;
 	SIZE_T indirect_jump_count = 0;
 	double avg_span = 0.0;
