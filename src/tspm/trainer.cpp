@@ -113,7 +113,7 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 	auto end = std::chrono::steady_clock::now();
 
 	// 数据转移与预处理
-	log_by_callback("[Trainer::train()] Done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Begin to train the malware dataset.\n");
+	log_by_callback("[Trainer::train()] Done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Begin to train the malware dataset(totally " + std::to_string(malware_proj_list.size()) + " projections).\n");
 
 	// 计时
 	begin = std::chrono::steady_clock::now();
@@ -188,7 +188,7 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 	// 计时
 	end = std::chrono::steady_clock::now();
 
-	log_by_callback("\r[Trainer::train()] Malware dataset training done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Call chain count: " + std::to_string(current_call_chain_list_.size()) + ", Begin to train the benign dataset.\n");
+	log_by_callback("\r[Trainer::train()] Malware dataset training done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Call chain count: " + std::to_string(current_call_chain_list_.size()) + ", Begin to train the benign dataset(totally " + std::to_string(benign_proj_list.size()) + " projections).\n");
 	malware_api_chain_list = std::move(current_call_chain_list_); // 移动当前调用链数据
 
 	// 清除这一轮训练数据
