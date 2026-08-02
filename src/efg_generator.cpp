@@ -27,6 +27,9 @@
 
 namespace starlight_v3 {
 
+// 最大允许500万状态，超过则会被截断
+constexpr SIZE_T STATE_LIMIT = 5000000;
+
 // PE导入函数信息，包含DLL名、函数名及IAT地址
 struct ImportInfo {
 	std::string dll_name_;
@@ -288,9 +291,9 @@ void EFGBuilder::Impl::build_global_efg() {
 	worklist.push({ parser_.get_entry_point(), ENTRY_NODE_RVA, {} });
 
 	std::unordered_map<uint64_t, std::unordered_set<uint64_t>> visited_states;
-	int state_limit = 5000000;
 
-	while (!worklist.empty() && state_limit-- > 0) {
+	SIZE_T i = 0;
+	while (!worklist.empty() && i++ < STATE_LIMIT) {
 		State state = std::move(worklist.front());
 		worklist.pop();
 
