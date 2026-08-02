@@ -9,8 +9,10 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <mutex>
 #include <queue>
 #include <string>
+#include <atomic>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -18,6 +20,7 @@
 
 #include "basic/api_table.h"
 #include "basic/types.h"
+#include "external/BS_thread_pool.hpp"
 #include "external/xxhash/xxhash.h"
 #include "tspm/trainer.h"
 
@@ -41,13 +44,13 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 
 	Model model; // 输出
 
-	log_callback_("[Trainer::train()] Initializing dataset.\n");
+	log_by_callback("[Trainer::train()] Initializing dataset.\n");
 
 	// 计时
 	auto begin = std::chrono::steady_clock::now();
 
 	// 先合并两个数据集的api_table，生成一个大table(这里注意还要修改两个数据集里nodes的api_id)，同时生成两个数据集的1-gram投影表
-	std::unordered_map<APIID_T, ProjectionList> malware_proj_list, benign_proj_list; // 本地病毒/白文件投影表
+	std::vector<std::pair<APIID_T, ProjectionList>> malware_proj_list, benign_proj_list; // 本地病毒/白文件投影表
 	for (int i = 0; i < malware_dataset.size(); ++i) { // 先遍历病毒数据集
 		EFG &efg = malware_dataset[i];
 		for (int j = 0; j < efg.nodes_.size(); ++j) { // 遍历EFG中所有节点
@@ -63,10 +66,15 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 			Projection proj;
 			proj.graph_index = i;
 			proj.api_index = j;
-			malware_proj_list[model.api_table.query_id(api_str).second].emplace_back(proj);
+			APIID_T api_id = model.api_table.query_id(api_str).second;
+			if (malware_proj_list.size() <= api_id) { // 检查当前投影集大小
+				malware_proj_list.resize(api_id + 1);
+			}
+			malware_proj_list[api_id].first = api_id; // 在投影生成阶段，malware_proj_list的索引对应为API_ID，直到排序阶段无实际意义
+			malware_proj_list[api_id].second.emplace_back(proj);
 
 			// 修改数据集节点的api_id
-			node = model.api_table.query_id(api_str).second;
+			node = api_id;
 		}
 	}
 	for (int i = 0; i < benign_dataset.size(); ++i) { // 遍历白数据集
@@ -84,10 +92,15 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 			Projection proj;
 			proj.graph_index = i;
 			proj.api_index = j;
-			benign_proj_list[model.api_table.query_id(api_str).second].emplace_back(proj);
+			APIID_T api_id = model.api_table.query_id(api_str).second;
+			if (benign_proj_list.size() <= api_id) { // 检查当前投影集大小
+				benign_proj_list.resize(api_id + 1);
+			}
+			benign_proj_list[api_id].first = api_id; // 在投影生成阶段，malware_proj_list的索引对应为API_ID，直到排序阶段无实际意义
+			benign_proj_list[api_id].second.emplace_back(proj);
 
 			// 修改数据集节点的api_id
-			node = model.api_table.query_id(api_str).second;
+			node = api_id;
 		}
 	}
 
@@ -100,21 +113,36 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 	auto end = std::chrono::steady_clock::now();
 
 	// 数据转移与预处理
-	log_callback_("[Trainer::train()] Done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Begin to train the malware dataset.\n");
+	log_by_callback("[Trainer::train()] Done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Begin to train the malware dataset.\n");
 
 	// 计时
 	begin = std::chrono::steady_clock::now();
 
+	// 线程池
+	BS::thread_pool thread_pool(config_.thread_count ? config_.thread_count : std::thread::hardware_concurrency());
+
+	// 全局timeset_(一个看起来没什么用但是可以很好地反馈训练情况的数据)
+	std::atomic<GREAT_SIZE_T> global_timeset_;
+
+	// 投影表LPT派发排序函数，通过先算消耗时间长的投影集提升训练速度
+	auto lpt_sorter = [](const std::pair<APIID_T, ProjectionList> &pl1, const std::pair<APIID_T, ProjectionList> &pl2) {
+		return pl1.second.size() > pl2.second.size(); // 按投影集大小倒序排序
+	};
+
 	// 先挖掘黑数据集调用链
 	std::vector<CallChain> malware_api_chain_list; // 返回的病毒调用链
 	dataset_ = &malware_dataset; // 设置数据集
-	visited_map_ = std::vector<std::vector<SIZE_T>>(malware_dataset.size(), std::vector<SIZE_T>()); // 处理visited_map_
-	timeset_ = 1; // 重置时间戳
+	global_timeset_ = 0; // 重置时间戳
 	min_count_ = static_cast<SIZE_T>(std::ceil(malware_dataset.size() * config_.min_support)); // 最小支持度
 	if (min_count_ == 0) { // 最低次数为0的时候输出警告信息
-		log_callback_("[Trainer::train()] WARN: min_count=0\n");
+		log_by_callback("[Trainer::train()] WARN: min_count=0\n");
 	}
 	max_count_ = static_cast<SIZE_T>(std::ceil(malware_dataset.size() * config_.max_support)); // 最大支持度
+
+	// 排序投影集
+	std::sort(malware_proj_list.begin(), malware_proj_list.end(), lpt_sorter);
+
+	// DFS参数列表
 	for (const auto &[api_id, proj_list] : malware_proj_list) {
 		// 查询当前API是否被ban
 		if (banned_apis_.count(api_id)) {
@@ -125,34 +153,46 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 		if (proj_list.size() > malware_dataset.size() * config_.max_root_support || proj_list.size() < min_count_) {
 			continue;
 		}
-		log_callback_("\r[Trainer::train()] Digging malware projection(timeset_=" + std::to_string(timeset_) + "): " + model.api_table.query_api(api_id).second);
-
-		current_prefix_.emplace_back(api_id);
-
-		// 将1-gram API数据写入数据集
-		if (proj_list.size() <= max_count_) { // 因为max_root_support和max_support不是一个参数，所以这里需要单独特判
-			CallChain root_node;
-			root_node.api_chain = current_prefix_;
-			root_node.weight = proj_list.size();
-			current_call_chain_list_.push_back(root_node);
-		}
 
 		// 递归搜索
-		dfs_call_chains(proj_list); // 挖掘调用链
+		thread_pool.detach_task([&]() {
+			DFSData current_data; // 当前递归用的DFSData对象
 
-		current_prefix_.pop_back();
+			// 初始化current_data
+			current_data.timeset_ = 1;
+			current_data.visited_map_ = std::vector<std::vector<GREAT_SIZE_T>>(malware_dataset.size(), std::vector<GREAT_SIZE_T>());
+
+			// 加入当前投影前缀
+			current_data.current_prefix_.emplace_back(api_id);
+
+			// 将1-gram API数据写入数据集
+			if (proj_list.size() <= max_count_) { // 因为max_root_support和max_support不是一个参数，所以这里需要单独特判
+				CallChain root_node;
+				root_node.api_chain = current_data.current_prefix_;
+				root_node.weight = proj_list.size();
+				current_call_chain_list_mutex_.lock();
+				current_call_chain_list_.push_back(root_node);
+				current_call_chain_list_mutex_.unlock();
+			}
+
+			dfs_call_chains(proj_list, current_data); // 挖掘调用链
+			log_by_callback("\r[Trainer::train()] Digged a malware projection(global_timeset_=" + std::to_string(global_timeset_ += current_data.timeset_) + "): " + model.api_table.query_api(api_id).second);
+
+			current_data.current_prefix_.pop_back();
+		});
 	}
+
+	// 等待任务结束
+	thread_pool.wait();
 
 	// 计时
 	end = std::chrono::steady_clock::now();
 
-	log_callback_("\r[Trainer::train()] Malware dataset training done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Call chain count: " + std::to_string(current_call_chain_list_.size()) + ", Begin to train the benign dataset.\n");
+	log_by_callback("\r[Trainer::train()] Malware dataset training done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Call chain count: " + std::to_string(current_call_chain_list_.size()) + ", Begin to train the benign dataset.\n");
 	malware_api_chain_list = std::move(current_call_chain_list_); // 移动当前调用链数据
 
 	// 清除这一轮训练数据
 	current_call_chain_list_.clear();
-	edge_set_.clear();
-	current_prefix_.clear();
 
 	// 计时
 	begin = std::chrono::steady_clock::now();
@@ -160,13 +200,17 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 	// 挖掘白数据集
 	std::vector<CallChain> benign_api_chain_list; // 返回的白样本调用链
 	dataset_ = &benign_dataset; // 设置数据集
-	visited_map_ = std::vector<std::vector<SIZE_T>>(benign_dataset.size(), std::vector<SIZE_T>()); // 处理visited_map_
-	timeset_ = 1; // 重置时间戳
+	global_timeset_ = 0; // 重置时间戳
 	min_count_ = static_cast<SIZE_T>(std::ceil(benign_dataset.size() * config_.min_support)); // 最小支持度
 	if (min_count_ == 0) { // 最低次数为0的时候输出警告信息
-		log_callback_("[Trainer::train()] WARN: min_count=0\n");
+		log_by_callback("[Trainer::train()] WARN: min_count=0\n");
 	}
 	max_count_ = static_cast<SIZE_T>(std::ceil(benign_dataset.size() * config_.max_support)); // 最大支持度
+
+	// 排序投影集
+	std::sort(benign_proj_list.begin(), benign_proj_list.end(), lpt_sorter);
+
+	// DFS参数列表
 	for (const auto &[api_id, proj_list] : benign_proj_list) {
 		// 查询当前API是否被ban
 		if (banned_apis_.count(api_id)) {
@@ -176,34 +220,46 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 		if (proj_list.size() > benign_dataset.size() * config_.max_root_support || proj_list.size() < min_count_) {
 			continue;
 		}
-		log_callback_("\r[Trainer::train()] Digging benign projection(timeset_=" + std::to_string(timeset_) + "): " + model.api_table.query_api(api_id).second);
-
-		current_prefix_.emplace_back(api_id);
-
-		// 将1-gram API数据写入数据集
-		if (proj_list.size() <= max_count_) { // 因为max_root_support和max_support不是一个参数，所以这里需要单独特判
-			CallChain root_node;
-			root_node.api_chain = current_prefix_;
-			root_node.weight = proj_list.size();
-			current_call_chain_list_.push_back(root_node);
-		}
 
 		// 递归搜索
-		dfs_call_chains(proj_list); // 挖掘调用链
+		thread_pool.detach_task([&]() {
+			DFSData current_data; // 当前递归用的DFSData对象
 
-		current_prefix_.pop_back();
+			// 初始化current_data
+			current_data.timeset_ = 1;
+			current_data.visited_map_ = std::vector<std::vector<GREAT_SIZE_T>>(benign_dataset.size(), std::vector<GREAT_SIZE_T>());
+
+			// 加入当前投影前缀
+			current_data.current_prefix_.emplace_back(api_id);
+
+			// 将1-gram API数据写入数据集
+			if (proj_list.size() <= max_count_) { // 因为max_root_support和max_support不是一个参数，所以这里需要单独特判
+				CallChain root_node;
+				root_node.api_chain = current_data.current_prefix_;
+				root_node.weight = proj_list.size();
+				current_call_chain_list_mutex_.lock();
+				current_call_chain_list_.push_back(root_node);
+				current_call_chain_list_mutex_.unlock();
+			}
+
+			dfs_call_chains(proj_list, current_data); // 挖掘调用链
+			log_by_callback("\r[Trainer::train()] Digged a benign projection(global_timeset_=" + std::to_string(global_timeset_ += current_data.timeset_) + "): " + model.api_table.query_api(api_id).second);
+
+			current_data.current_prefix_.pop_back();
+		});
 	}
+
+	// 等待任务结束
+	thread_pool.wait();
 
 	// 计时
 	end = std::chrono::steady_clock::now();
 
-	log_callback_("\r[Trainer::train()] Benign dataset training done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Call chain count: " + std::to_string(current_call_chain_list_.size()) + ". Merging call chains.\n");
+	log_by_callback("\r[Trainer::train()] Benign dataset training done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Call chain count: " + std::to_string(current_call_chain_list_.size()) + ". Merging call chains.\n");
 	benign_api_chain_list = std::move(current_call_chain_list_); // 移动当前调用链数据
 
 	// 清除这一轮训练数据
 	current_call_chain_list_.clear();
-	edge_set_.clear();
-	current_prefix_.clear();
 
 	// 计时
 	begin = std::chrono::steady_clock::now();
@@ -219,7 +275,7 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 	end = std::chrono::steady_clock::now();
 
 	// 计算调用链权重
-	log_callback_("[Trainer::train()] Done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Calculating the weights of the call chains.\n");
+	log_by_callback("[Trainer::train()] Done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Calculating the weights of the call chains.\n");
 
 	// 计时
 	begin = std::chrono::steady_clock::now();
@@ -260,7 +316,7 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 	// 计时
 	end = std::chrono::steady_clock::now();
 
-	log_callback_("[Trainer::train()] Done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Sorting call chains.\n");
+	log_by_callback("[Trainer::train()] Done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Sorting call chains.\n");
 
 	// 计时
 	begin = std::chrono::steady_clock::now();
@@ -279,7 +335,7 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 	end = std::chrono::steady_clock::now();
 
 	// 构建Trie树
-	log_callback_("[Trainer::train()] Done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Generating trie tree to model.\n");
+	log_by_callback("[Trainer::train()] Done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Generating trie tree to model.\n");
 
 	// 计时
 	begin = std::chrono::steady_clock::now();
@@ -302,13 +358,13 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 	end = std::chrono::steady_clock::now();
 
 	// 其他参数写入
-	log_callback_("[Trainer::train()] Done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Writing model parameters.\n");
+	log_by_callback("[Trainer::train()] Done. Time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) + "ms. Writing model parameters.\n");
 	model.max_skip = config_.max_skip;
 
 	// 总耗时计时
 	auto total_end = std::chrono::steady_clock::now();
 
-	log_callback_("[Trainer::train()] All done. Total time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(total_end - total_begin).count()) + "ms.\n");
+	log_by_callback("[Trainer::train()] All done. Total time: " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(total_end - total_begin).count()) + "ms.\n");
 
 	return model;
 }
@@ -334,7 +390,7 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 //     3.6 下一步dfs()
 //     3.7 从edge_set_删掉当前边，然后从current_prefix_ pop当前API
 // 4. 没有了喵
-void Trainer::dfs_call_chains(const ProjectionList &current_proj_list, SIZE_T current_depth) {
+void Trainer::dfs_call_chains(const ProjectionList &current_proj_list, DFSData &current_data, SIZE_T current_depth) {
 	const std::vector<EFG> &dataset = *dataset_; // 加个别名，方便后面用
 
 	std::unordered_map<APIID_T, ProjectionList> local_proj_list; // 本地投影集
@@ -347,13 +403,11 @@ void Trainer::dfs_call_chains(const ProjectionList &current_proj_list, SIZE_T cu
 		const EFG &current_efg = dataset[proj.graph_index];
 
 		// BFS
-		std::vector<SIZE_T> &visited = visited_map_[proj.graph_index];
+		std::vector<GREAT_SIZE_T> &visited = current_data.visited_map_[proj.graph_index];
 		if (visited.size() < current_efg.nodes_.size()) { // 按需扩容或初始化当前visited数组
 			visited.resize(current_efg.nodes_.size(), 0);
 		}
-		if (!config_.fast_mode) { // 非快速模式需要确保每一轮dfs时间戳独立
-			++timeset_;
-		}
+		const GREAT_SIZE_T &timeset_ = ++current_data.timeset_; // Alias for timeset_ in current_data
 
 		std::queue<std::pair<EFGListNode, SIZE_T>> queue; // 这里不用Projection作为类型名的原因是这里本质上还是对图进行bfs，但是只有通过了不成环筛选的节点才能被当作投影push(这里的Projection和EFGListNode是一个类型)，pair的第二个参数代表深度
 		queue.push(std::make_pair(proj, 0));
@@ -376,8 +430,8 @@ void Trainer::dfs_call_chains(const ProjectionList &current_proj_list, SIZE_T cu
 			// 只收录非根节点(不然会死循环)和出现次数小于max_count_的API
 			if (depth > 0 && current_api_efg_set.size() <= max_count_) {
 				// 计算hashcode(这里的SIZE_T=uint32_t, GREAT_SIZE_T=uint64_t)
-				GREAT_SIZE_T hashcode = ((static_cast<GREAT_SIZE_T>(current_prefix_.back())) << 32ull) | static_cast<GREAT_SIZE_T>(current_api_id);
-				if (edge_set_.count(hashcode)) { // 检查是否全局成环
+				GREAT_SIZE_T hashcode = ((static_cast<GREAT_SIZE_T>(current_data.current_prefix_.back())) << 32ull) | static_cast<GREAT_SIZE_T>(current_api_id);
+				if (current_data.edge_set_.count(hashcode)) { // 检查是否全局成环
 					continue;
 				}
 
@@ -442,37 +496,33 @@ void Trainer::dfs_call_chains(const ProjectionList &current_proj_list, SIZE_T cu
 		}
 
 		// 计算hashcode(这个要先算，因为后面current_prefix_就变了，和碎碎念里说的处理顺序不一样)
-		GREAT_SIZE_T hashcode = ((static_cast<GREAT_SIZE_T>(current_prefix_.back())) << 32ull) | static_cast<GREAT_SIZE_T>(api_id);
+		GREAT_SIZE_T hashcode = ((static_cast<GREAT_SIZE_T>(current_data.current_prefix_.back())) << 32ull) | static_cast<GREAT_SIZE_T>(api_id);
 
 		// 将当前api_id插入current_prefix末尾
-		current_prefix_.push_back(api_id);
+		current_data.current_prefix_.push_back(api_id);
 
 		// 将当前调用链(前缀)加入调用链数据库
 		CallChain call_chain;
-		call_chain.api_chain = current_prefix_;
+		call_chain.api_chain = current_data.current_prefix_;
 		call_chain.weight = local_efg_map[api_id].size(); // 这里的weight实际上是API链出现次数
+		current_call_chain_list_mutex_.lock();
 		current_call_chain_list_.push_back(call_chain);
+		current_call_chain_list_mutex_.unlock();
 
 		// 只有不超过最大递归深度且不超过最大调用链长度时向下继续递归
-		if (current_depth + 1 < config_.max_depth && current_prefix_.size() < config_.max_length) {
+		if (current_depth + 1 < config_.max_depth && current_data.current_prefix_.size() < config_.max_length) {
 			// 将当前边的hashcode插入edge_set_中
-			edge_set_.insert(hashcode);
-
-			// 处理timeset_
-			timeset_ += config_.fast_mode;
+			current_data.edge_set_.insert(hashcode);
 
 			// 这里其实new_proj_list = proj_list，因此无需单独计算new_proj_list
-			dfs_call_chains(proj_list, current_depth + 1);
-
-			// 回溯timeset_
-			timeset_ -= config_.fast_mode;
+			dfs_call_chains(proj_list, current_data, current_depth + 1);
 
 			// 后处理
-			edge_set_.erase(hashcode); // 删除当前边
+			current_data.edge_set_.erase(hashcode); // 删除当前边
 		}
 
 		// 后处理
-		current_prefix_.pop_back(); // pop_back当前API
+		current_data.current_prefix_.pop_back(); // pop_back当前API
 	}
 }
 

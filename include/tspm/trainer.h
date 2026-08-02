@@ -13,6 +13,7 @@
 #include "basic/types.h"
 #include "tspm/model.h"
 #include <functional>
+#include <mutex>
 #include <unordered_set>
 
 namespace starlight_v3::tspm {
@@ -50,7 +51,7 @@ struct CallChainAPI {
  * @brief 训练配置结构体
  */
 struct TrainingConfig {
-	bool fast_mode; ///< 快速训练模式(在max_skip>0的时候会出现一定数据损失，可以大幅提升训练速度)
+	SIZE_T thread_count; ///< 训练的时候的最大并行数，设置为0则是系统最大并发数
 	SIZE_T max_skip; ///< 挖掘时为了跨过混淆API允许的最大忽略次数，过大可能导致模型文件过大或OOM，过小可能导致模型掺杂被混淆过的病毒样本数据
 	SIZE_T max_length; ///< 一条有效链的最大长度
 	SIZE_T max_depth; ///< DFS递归树最大深度
@@ -95,25 +96,46 @@ public:
 
 private:
 	// 训练配置
-	TrainingConfig config_;
-	std::function<void(const std::string &)> log_callback_;
+	TrainingConfig config_; ///< 全局训练参数
+	std::function<void(const std::string &)> log_callback_; ///< 日志回调
+	std::mutex log_callback_mutex_; ///< 我就知道你不会给自己的日志回调手动加锁的~小笨蛋♥️就让我to来帮你叭！快说谢谢to酱
+
+	/**
+	 * @brief 线程安全的log_callback_封装
+	 */
+	inline void log_by_callback(const std::string &msg) {
+		log_callback_mutex_.lock();
+		log_callback_(msg);
+		log_callback_mutex_.unlock();
+	}
+
+	/**
+	 * @brief dfs_call_chains参数结构体
+	 */
+	struct DFSData {
+		GREAT_SIZE_T timeset_; ///< 给visited_map_标记用的timeset_
+		std::vector<std::vector<GREAT_SIZE_T>> visited_map_; ///< 全局visited数组
+		APIChain current_prefix_; ///< 当前前缀，用于拼接调用链
+		std::unordered_set<GREAT_SIZE_T> edge_set_; ///< 防环路用去重边集
+	};
 
 	/**
 	 * @brief 内部封装的用于搜索频繁条目的接口
 	 * @param current_proj_list 当前处理的API链的投影表
 	 */
-	void dfs_call_chains(const ProjectionList &current_proj_list, SIZE_T current_depth = 0);
+	void dfs_call_chains(const ProjectionList &current_proj_list, DFSData &current_data, SIZE_T current_depth = 0);
 
-	// 训练时用到的临时变量(用于作为dfs间参数使用)
+	// 训练时用到的临时变量(dfs用只读参数，无锁)
 	SIZE_T max_count_; ///< 允许一条链在数据集中出现的最高次数，设置为0则无上限
 	SIZE_T min_count_; ///< 允许一条链在数据集中出现的最小次数
 	std::unordered_set<APIID_T> banned_apis_; ///< 被ban掉的API
 	const std::vector<EFG> *dataset_ = nullptr; ///< 当前使用的数据集
-	std::unordered_set<GREAT_SIZE_T> edge_set_; ///< 防环路用去重边集
+
+	// 训练是用到的临时变量(用于dfs输出或修改，需要加锁or原子变量)
+	std::mutex current_call_chain_list_mutex_; ///< mutex for current_call_chain_list_
 	std::vector<CallChain> current_call_chain_list_; ///< 当前调用链数据库
-	APIChain current_prefix_; ///< 当前前缀，用于拼接调用链
-	std::vector<std::vector<SIZE_T>> visited_map_; // 全局visited数组
-	GREAT_SIZE_T timeset_ = 1; // 时间戳，用来给visited做标记(用uint64_t防止大数据集下时间戳溢出)
+
+	// Trainer::train()用临时变量
 	std::vector<CallChain> call_chain_list_; ///< 最终输出与Trie树之间的CallChain缓存
 
 	/**

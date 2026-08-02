@@ -16,6 +16,110 @@
 
 namespace fs = std::filesystem;
 
+/**
+ * @brief 将 AnalysisResult 导出为 Graphviz DOT 格式文件
+ * @param result 推理结果
+ * @param filename 输出的文件名 (例如 "result.dot")
+ */
+void export_analysis_to_dot(const starlight_v3::tspm::AnalysisResult& result, const std::string& filename) {
+    std::ofstream ofs(filename);
+    if (!ofs.is_open()) {
+        std::cerr << "Error: Cannot open file " << filename << " for writing." << std::endl;
+        return;
+    }
+
+    // 1. DOT 文件头
+    ofs << "digraph EvidenceTree {" << std::endl;
+    ofs << "  rankdir=TB;" << std::endl; // TB: Top to Bottom, LR: Left to Right
+    ofs << "  node [shape=box, style=\"rounded,filled\", fontname=\"Arial\", fontsize=10];" << std::endl;
+    ofs << "  edge [fontname=\"Arial\", fontsize=9];" << std::endl;
+
+    // 2. 添加总分展示 (作为一个不可见的标题节点或 Label)
+    // 这里使用 Label 属性显示在图表最上方
+    ofs << "  labelloc=\"t\";" << std::endl;
+    ofs << "  label=\"<<TABLE BORDER=\"0\" CELLBORDER=\"0\" CELLSPACING=\"0\">" << std::endl;
+    ofs << "    <TR><TD><B>Analysis Summary</B></TD></TR>" << std::endl;
+    ofs << "    <TR><TD>Final Score: " << std::fixed << std::setprecision(4) << result.final_score << "</TD></TR>" << std::endl;
+    ofs << "    <TR><TD>Malware Score: " << std::fixed << std::setprecision(4) << result.malware_score << "</TD></TR>" << std::endl;
+    ofs << "    <TR><TD>Benign Score: " << std::fixed << std::setprecision(4) << result.benign_score << "</TD></TR>" << std::endl;
+    ofs << "  </TABLE>>\";" << std::endl;
+    ofs << "  fontsize=14;" << std::endl;
+    ofs << "  fontname=\"Arial Bold\";" << std::endl;
+    ofs << std::endl;
+
+    // 用于记录已经处理过的节点指针，避免在 DAG 中重复定义节点
+    std::unordered_set<const starlight_v3::tspm::EvidenceTree*> visited_nodes;
+
+    // 递归辅助函数：处理节点及其子树
+    std::function<void(const std::shared_ptr<starlight_v3::tspm::EvidenceTree>&)> process_node = 
+        [&](const std::shared_ptr<starlight_v3::tspm::EvidenceTree>& node) {
+            if (!node) return;
+
+            const starlight_v3::tspm::EvidenceTree* raw_ptr = node.get();
+            
+            // 如果节点已经被处理过，则直接返回（避免重复定义和无限递归）
+            if (visited_nodes.count(raw_ptr)) {
+                return;
+            }
+            visited_nodes.insert(raw_ptr);
+
+            // 生成唯一的节点 ID (使用指针地址)
+            std::string node_id = "node_" + std::to_string(reinterpret_cast<uintptr_t>(raw_ptr));
+
+            // --- 1. 定义节点样式 (颜色高亮) ---
+            ofs << "  " << node_id << " [";
+            
+            if (node->weight > 1e-6) {
+                // 恶意/风险权重 -> 红色
+                ofs << "fillcolor=\"#ffcccc\", color=\"#cc0000\", penwidth=1.5"; 
+            } else if (node->weight < -1e-6) {
+                // 良性权重 -> 绿色
+                ofs << "fillcolor=\"#ccffcc\", color=\"#006600\", penwidth=1.5";
+            } else {
+                // 权重为0或接近0 -> 灰色 (通常是路径节点)
+                ofs << "fillcolor=\"#eeeeee\", color=\"#999999\", style=\"rounded,dashed,filled\"";
+            }
+
+            // 标签内容：API名 和 权重
+            ofs << ", label=\"" << node->api_name << "\\n";
+            ofs << "Weight: " << std::fixed << std::setprecision(3) << node->weight << "\"];" << std::endl;
+
+            // --- 2. 递归处理子节点并绘制边 ---
+            for (const auto& child : node->sub_nodes) {
+                if (!child) continue;
+
+                std::string child_id = "node_" + std::to_string(reinterpret_cast<uintptr_t>(child.get()));
+
+                // 绘制边
+                ofs << "  " << node_id << " -> " << child_id << " [";
+                
+                // 边的颜色也可以跟随子节点的颜色，稍微淡一点
+                if (child->weight > 1e-6) {
+                    ofs << "color=\"#ff9999\"";
+                } else if (child->weight < -1e-6) {
+                    ofs << "color=\"#99cc99\"";
+                } else {
+                    ofs << "color=\"#cccccc\"";
+                }
+                ofs << "];" << std::endl;
+
+                // 递归处理子节点
+                process_node(child);
+            }
+        };
+
+    // 3. 遍历所有的根节点
+    for (const auto& root_tree : result.evidence_trees) {
+        process_node(root_tree);
+    }
+
+    ofs << "}" << std::endl;
+    ofs.close();
+
+    std::cout << "DOT file exported to: " << filename << std::endl;
+    std::cout << "You can generate image using: dot -Tpng " << filename << " -o output.png" << std::endl;
+}
+
 std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t max_dataset_size, size_t thread_count = 0, const std::unordered_set<std::string> &allowed_extensions = {}) {
 	if (!fs::is_directory(folder_path)) {
 		return {};
@@ -112,18 +216,18 @@ std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t 
 
 int main() {
 	// 1. 指定黑白数据集文件夹路径（请根据你的实际路径修改）
-	std::string malware_folder = "/run/media/Ternary_Operator/ShihyDataHouse/CSafe-NebulaEngine/dataset/malware/";
-	std::string benign_folder = "/run/media/Ternary_Operator/ShihyDataHouse/CSafe-NebulaEngine/dataset/benign/";
+	std::string malware_folder = "/toDataDrive/CSafe/CSafe-Starlight/dataset/malware/";
+	std::string benign_folder = "/toDataDrive/CSafe/CSafe-Starlight/dataset/benign/";
 
 	std::vector<starlight_v3::EFG> malware_dataset;
 	std::vector<starlight_v3::EFG> benign_dataset;
 
 	// 2. 提取 EFG
 	std::cout << "=== Loading Malware Dataset ===" << std::endl;
-	malware_dataset = load_dataset(malware_folder, 5000);
+	malware_dataset = load_dataset(malware_folder, 1000);
 
 	std::cout << "\n=== Loading Benign Dataset ===" << std::endl;
-	benign_dataset = load_dataset(benign_folder, 5000);
+	benign_dataset = load_dataset(benign_folder, 1000);
 
 	// 检查数据集是否为空
 	if (malware_dataset.empty() || benign_dataset.empty()) {
@@ -136,13 +240,13 @@ int main() {
 	starlight_v3::tspm::TrainingConfig config;
 	config.preprune_factor = /*1.5*/ 10000000000.0;
 	config.max_root_support = 1.0;
-	config.max_expan_ratio = 1.9;
-	config.fast_mode = false; // 全训练
+	config.max_expan_ratio = 1.8;
+	config.thread_count = 0;
 	config.min_support = 0.002; // 病毒最小支持度
-	config.max_skip = 1; // 允许跳过1个混淆API
+	config.max_skip = 2; // 允许跳过1个混淆API
 	config.max_length = 5; // 调用链最大长度
 	config.max_depth = 5; // 最大递归深度
-	config.min_distinction = 0.0; // 最小区分度
+	config.min_distinction = 0.64; // 最小区分度
 
 	// 4. 日志回调函数
 	auto logger = [](const std::string &msg) {
@@ -160,20 +264,28 @@ int main() {
 	std::cout << "Starting test." << std::endl;
 
 	std::cout << "=== Loading Malware Dataset ===" << std::endl;
-	malware_dataset = load_dataset(malware_folder, 200);
+	malware_dataset = load_dataset(malware_folder, 150);
 
 	std::cout << "\n=== Loading Benign Dataset ===" << std::endl;
-	benign_dataset = load_dataset(benign_folder, 200);
+	benign_dataset = load_dataset(benign_folder, 150);
 
 	starlight_v3::tspm::Reasoner reasoner(model);
 	std::cout << "malware: " << std::endl;
 	for(int i = 0; i < malware_dataset.size(); ++i) {
-		std::cout << "(size=" << malware_dataset[i].nodes_.size() << ", score=" << reasoner.calculate_risk_score(malware_dataset[i]) << ")" << std::endl;
+		starlight_v3::tspm::AnalysisResult result = reasoner.analyze_efg(malware_dataset[i]);
+		// if(i % 3) {
+		// 	export_analysis_to_dot(result, "dot_files/malware_" + std::to_string(result.evidence_trees.size()) + ".dot");
+		// }
+		std::cout << "(size=" << malware_dataset[i].nodes_.size() << ", score=" << result.final_score << ", malscore=" << result.malware_score << ", benscore=" << result.benign_score << ", evidence count=" << result.evidence_trees.size() << ")" << std::endl;
 	}
 	std::cout << std::endl;
 	std::cout << "benign: " << std::endl;
 	for(int i = 0; i < benign_dataset.size(); ++i) {
-		std::cout << "(size=" << benign_dataset[i].nodes_.size() << ", score=" << reasoner.calculate_risk_score(benign_dataset[i]) << ")" << std::endl;
+		starlight_v3::tspm::AnalysisResult result = reasoner.analyze_efg(benign_dataset[i]);
+		// if(i % 3) {
+		// 	export_analysis_to_dot(result, "dot_files/benign_" + std::to_string(result.evidence_trees.size()) + ".dot");
+		// }
+		std::cout << "(size=" << malware_dataset[i].nodes_.size() << ", score=" << result.final_score << ", malscore=" << result.malware_score << ", benscore=" << result.benign_score << ", evidence count=" << result.evidence_trees.size() << ")" << std::endl;
 	}
 	return 0;
 }

@@ -16,7 +16,7 @@ namespace {
  * @brief 通过dfs_risk_score的参数生成其对应的GREAT_SIZE_T键
  */
 inline starlight_v3::GREAT_SIZE_T make_64_key(starlight_v3::SIZE_T trie, starlight_v3::SIZE_T efg, starlight_v3::SIZE_T skip) {
-	return ((uint64_t)skip << 60) | ((uint64_t)efg << 20) | (uint64_t)trie;
+	return ((uint64_t)skip << 60) | ((uint64_t)efg << 32) | (uint64_t)trie;
 }
 
 } // namespace
