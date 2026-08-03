@@ -6,3 +6,6 @@ build/
 *.o
 *.a
 *.so
+
+# 训练配置
+train.conf

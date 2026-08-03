@@ -6,7 +6,7 @@
  * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  *
  * 子命令:
- *   train <malware_dir> <benign_dir> <model_path> [max_train_samples]  训练模型
+ *   train <malware_dir> <benign_dir> <model_path> <config_path> [max_train_samples] [version]  训练模型
  *   score <model_path> <malware_dir> <benign_dir> [max_score_samples]  对黑白数据集跑分并统计
  *   infer <model_path> <target> [max_samples]                          推理判定(按单文件或文件夹)
  *   --version                                                          输出版本信息
@@ -21,9 +21,12 @@
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <optional>
+#include <sstream>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <unordered_set>
@@ -203,10 +206,117 @@ bool load_model(const std::string &model_path, starlight_v3::Model &model) {
 	return true;
 }
 
+// 从纯文本配置文件加载训练参数
+// 文件格式: 每行"键 = 值", 行首#为注释, 空行忽略.
+// 键与TrainingConfig/LGBMConfig/TrainConfig字段对应, 去掉C++代码中的config.前缀:
+//   tspm_config.<字段> / lgbm_config.<字段> / 顶层字段(交叉训练配置)
+// 返回false表示配置文件无法打开或存在未知键(为避免拼写错误被静默忽略).
+bool load_train_config(const std::string &config_path, starlight_v3::TrainConfig &config) {
+	std::ifstream ifs(config_path);
+	if (!ifs.is_open()) {
+		std::cerr << "[Error] 无法打开训练配置文件: " << config_path << std::endl;
+		return false;
+	}
+
+	std::string line;
+	int line_num = 0;
+	while (std::getline(ifs, line)) {
+		++line_num;
+		// 去除首尾空白
+		size_t start = line.find_first_not_of(" \t\r\n");
+		if (start == std::string::npos) {
+			continue; // 空行
+		}
+		if (line[start] == '#') {
+			continue; // 注释
+		}
+		// 定位=号
+		size_t eq = line.find('=', start);
+		if (eq == std::string::npos) {
+			std::cerr << "[Error] " << config_path << ":" << line_num << " 缺少=号: " << line << std::endl;
+			return false;
+		}
+		std::string key = line.substr(start, line.find_last_not_of(" \t", eq - 1) - start + 1);
+		std::string value_str = line.substr(eq + 1);
+		// 去除值首尾空白
+		size_t vstart = value_str.find_first_not_of(" \t");
+		size_t vend = value_str.find_last_not_of(" \t\r\n");
+		if (vstart == std::string::npos) {
+			value_str.clear();
+		} else {
+			value_str = value_str.substr(vstart, vend - vstart + 1);
+		}
+
+		// 字段分派
+		try {
+			if (key.rfind("tspm_config.", 0) == 0) {
+				const std::string field = key.substr(std::string("tspm_config.").size());
+				if (field == "preprune_factor") config.tspm_config.preprune_factor = std::stod(value_str);
+				else if (field == "max_root_support") config.tspm_config.max_root_support = std::stod(value_str);
+				else if (field == "max_expan_ratio") config.tspm_config.max_expan_ratio = std::stod(value_str);
+				else if (field == "thread_count") config.tspm_config.thread_count = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "min_support") config.tspm_config.min_support = std::stod(value_str);
+				else if (field == "max_skip") config.tspm_config.max_skip = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "max_length") config.tspm_config.max_length = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "max_depth") config.tspm_config.max_depth = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "min_distinction") config.tspm_config.min_distinction = std::stod(value_str);
+				else if (field == "banned_apis") {
+					config.tspm_config.banned_apis.clear();
+					std::stringstream ss(value_str);
+					std::string api;
+					while (std::getline(ss, api, ',')) {
+						size_t b = api.find_first_not_of(" \t");
+						size_t e = api.find_last_not_of(" \t");
+						if (b != std::string::npos && e != std::string::npos) {
+							config.tspm_config.banned_apis.insert(api.substr(b, e - b + 1));
+						}
+					}
+				}
+				else {
+					std::cerr << "[Error] " << config_path << ":" << line_num << " 未知tspm字段: " << field << std::endl;
+					return false;
+				}
+			} else if (key.rfind("lgbm_config.", 0) == 0) {
+				const std::string field = key.substr(std::string("lgbm_config.").size());
+				if (field == "num_iterations") config.lgbm_config.num_iterations = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "learning_rate") config.lgbm_config.learning_rate = std::stod(value_str);
+				else if (field == "num_leaves") config.lgbm_config.num_leaves = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "min_data_in_leaf") config.lgbm_config.min_data_in_leaf = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "feature_fraction") config.lgbm_config.feature_fraction = std::stod(value_str);
+				else if (field == "bagging_fraction") config.lgbm_config.bagging_fraction = std::stod(value_str);
+				else if (field == "bagging_freq") config.lgbm_config.bagging_freq = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "lambda_l2") config.lgbm_config.lambda_l2 = std::stod(value_str);
+				else if (field == "validation_ratio") config.lgbm_config.validation_ratio = std::stod(value_str);
+				else if (field == "early_stopping_rounds") config.lgbm_config.early_stopping_rounds = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "random_seed") config.lgbm_config.random_seed = static_cast<unsigned int>(std::stoul(value_str));
+				else if (field == "thread_count") config.lgbm_config.thread_count = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else {
+					std::cerr << "[Error] " << config_path << ":" << line_num << " 未知lgbm字段: " << field << std::endl;
+					return false;
+				}
+			} else if (key == "cross_validation_k") {
+				config.cross_validation_k = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+			} else if (key == "random_seed") {
+				config.random_seed = static_cast<unsigned int>(std::stoul(value_str));
+			} else if (key == "thread_count") {
+				config.thread_count = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+			} else {
+				std::cerr << "[Error] " << config_path << ":" << line_num << " 未知字段: " << key << std::endl;
+				return false;
+			}
+		} catch (const std::exception &e) {
+			std::cerr << "[Error] " << config_path << ":" << line_num << " 解析字段 " << key << " 失败: " << e.what() << std::endl;
+			return false;
+		}
+	}
+
+	return true;
+}
+
 // 训练模式入口, 整体流程: 加载黑白数据集 -> 绑定样本 -> 配置训练参数 ->
 // 交叉训练生成特征 -> LightGBM训练 -> 最终tosSPM全量训练 -> 保存模型 -> 重新加载验证.
 // 返回0成功, 非0失败.
-int run_train(const std::string &malware_folder, const std::string &benign_folder, const std::string &model_path, size_t max_train_samples, const std::string &version_str) {
+int run_train(const std::string &malware_folder, const std::string &benign_folder, const std::string &model_path, size_t max_train_samples, const std::string &version_str, const std::string &config_path) {
 	// 加载训练数据集(同时收集源文件路径, 用于PE特征提取)
 	std::cout << "[Info] 正在加载恶意样本数据集..." << std::endl;
 	std::vector<fs::path> malware_paths, benign_paths;
@@ -225,38 +335,13 @@ int run_train(const std::string &malware_folder, const std::string &benign_folde
 	std::vector<starlight_v3::TrainSample> malware_samples = make_samples(malware_dataset, malware_paths);
 	std::vector<starlight_v3::TrainSample> benign_samples = make_samples(benign_dataset, benign_paths);
 
-	// 配置训练参数
+	// 配置训练参数(从配置文件加载, 见train.conf)
 	starlight_v3::TrainConfig config;
-
-	// tosSPM训练参数(字段说明见include/tspm/trainer.h的TrainingConfig)
-	config.tspm_config.preprune_factor = 10000000000.0;
-	config.tspm_config.max_root_support = 1.0;
-	config.tspm_config.max_expan_ratio = 1.8;
-	config.tspm_config.thread_count = 0;
-	config.tspm_config.min_support = 0.002; // 病毒最小支持度
-	config.tspm_config.max_skip = 2; // 允许跳过1个混淆API
-	config.tspm_config.max_length = 5; // 调用链最大长度
-	config.tspm_config.max_depth = 5; // 最大递归深度
-	config.tspm_config.min_distinction = 0.64; // 最小区分度
-
-	// LightGBM训练参数(字段说明见include/lgbm/trainer.h的LGBMConfig)
-	config.lgbm_config.num_iterations = 200; // 最大训练轮数
-	config.lgbm_config.learning_rate = 0.05; // 学习率
-	config.lgbm_config.num_leaves = 63; // 叶子节点数
-	config.lgbm_config.min_data_in_leaf = 20; // 叶子最小样本数
-	config.lgbm_config.feature_fraction = 0.9; // 特征采样比例
-	config.lgbm_config.bagging_fraction = 0.9; // 样本采样比例
-	config.lgbm_config.bagging_freq = 1; // bagging频率
-	config.lgbm_config.lambda_l2 = 1.0; // L2正则
-	config.lgbm_config.validation_ratio = 0.2; // 验证集比例
-	config.lgbm_config.early_stopping_rounds = 20; // 早停轮数
-	config.lgbm_config.random_seed = 42; // 随机种子
-	config.lgbm_config.thread_count = 0; // LightGBM线程数
-
-	// 交叉训练配置
-	config.cross_validation_k = 2; // 交叉训练折数
-	config.random_seed = 42; // 折划分随机种子
-	config.thread_count = 0; // 特征生成并行线程数
+	if (!config_path.empty()) {
+		if (!load_train_config(config_path, config)) {
+			return -1;
+		}
+	}
 
 	// 日志回调函数
 	auto logger = [](const std::string &msg) {
@@ -464,12 +549,13 @@ void print_usage(const char *program_name) {
 	std::cout << "CSafe Starlight V3 " << kVersion << " - 杀毒引擎官方训练/跑分/推理工具" << std::endl;
 	std::cout << std::endl;
 	std::cout << "Usage:" << std::endl;
-	std::cout << "  " << program_name << " train <malware_dir> <benign_dir> <model_path> [max_train_samples] [version]" << std::endl;
+	std::cout << "  " << program_name << " train <malware_dir> <benign_dir> <model_path> <config_path> [max_train_samples] [version]" << std::endl;
 	std::cout << "  " << program_name << " score <model_path> <malware_dir> <benign_dir> [max_score_samples]" << std::endl;
 	std::cout << "  " << program_name << " infer <model_path> <target> [max_samples]" << std::endl;
 	std::cout << std::endl;
 	std::cout << "Subcommands:" << std::endl;
 	std::cout << "  train   训练模型: 交叉训练生成特征 -> LightGBM -> 最终tosSPM全量训练, 保存到model_path" << std::endl;
+	std::cout << "          <config_path> 必选: 训练参数配置文件(见train.conf示例, 格式为 键=值)" << std::endl;
 	std::cout << "          [version] 可选: 模型版本号(YY.MM.DD形式, 如 26.08.03), 作为病毒库日期标记" << std::endl;
 	std::cout << "  score   跑分: 对黑白样本文件夹分别打分, 输出平均分与判定准确率(用于模型评估)" << std::endl;
 	std::cout << "  infer   推理判定: 对单个PE文件或文件夹(递归)执行恶意/良性判定" << std::endl;
@@ -497,15 +583,15 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (mode == "train") {
-		if (argc < 5) {
-			std::cerr << "[Error] train 需要参数: <malware_dir> <benign_dir> <model_path>" << std::endl;
+		if (argc < 6) {
+			std::cerr << "[Error] train 需要参数: <malware_dir> <benign_dir> <model_path> <config_path>" << std::endl;
 			print_usage(argv[0]);
 			return -1;
 		}
-		size_t max_train_samples = parse_size_arg(argc >= 6 ? argv[5] : nullptr, 1000, "max_train_samples");
-		std::string version_str; // 可选第6个参数: 模型版本(YY.MM.DD形式)
-		if (argc >= 7) {
-			version_str = argv[6];
+		size_t max_train_samples = parse_size_arg(argc >= 7 ? argv[6] : nullptr, 1000, "max_train_samples");
+		std::string version_str; // 可选第7个参数: 模型版本(YY.MM.DD形式)
+		if (argc >= 8) {
+			version_str = argv[7];
 			// 校验格式: 必须为 YY.MM.DD (2位数字.2位数字.2位数字)
 			// 同时校验数字合法性, 防止后续stoi抛异常(如"2a.08.03")
 			bool valid_version = version_str.size() == 8 && version_str[2] == '.' && version_str[5] == '.';
@@ -525,7 +611,7 @@ int main(int argc, char *argv[]) {
 				return -1;
 			}
 		}
-		return run_train(argv[2], argv[3], argv[4], max_train_samples, version_str);
+		return run_train(argv[2], argv[3], argv[4], max_train_samples, version_str, argv[5]);
 	}
 
 	if (mode == "score") {
