@@ -89,6 +89,10 @@ std::vector<starlight_v3::SIZE_T> calc_entry_distances(const starlight_v3::EFG &
 		starlight_v3::SIZE_T current = queue[head];
 		for (starlight_v3::SIZE_T e = efg.offeset_[current]; e < efg.offeset_[current + 1]; ++e) {
 			starlight_v3::SIZE_T next = (starlight_v3::SIZE_T)efg.edges_[e].to_node_index;
+			// 防御: to_node_index越界时跳过, 防止外部构造的畸形EFG触发越界写
+			if (next >= dist.size()) {
+				continue;
+			}
 			if (dist[next] == starlight_v3::INVALID_NUM) {
 				dist[next] = dist[current] + 1;
 				queue.push_back(next);
@@ -123,14 +127,18 @@ class ChainAccumulator {
 public:
 	/**
 	 * @brief 遍历证据森林并累加全部链条的统计量
+	 * @details 证据树是DAG(同一子树被多个父节点共享), 若按路径实例展开遍历,
+	 * 共享节点级联时路径数会指数级爆炸导致内存失控. 因此使用visited集合对
+	 * 每个树节点去重, 每个节点只统计一次, 链按其首次被访问时的路径记录.
 	 * @param roots 证据森林根节点列表
 	 * @param dist EFG入口距离数组
 	 * @param efg 目标EFG
 	 */
 	void walk_forest(const std::vector<std::shared_ptr<starlight_v3::tspm::EvidenceTree>> &roots, const std::vector<starlight_v3::SIZE_T> &dist, const starlight_v3::EFG &efg) {
+		std::unordered_set<const starlight_v3::tspm::EvidenceTree *> visited; // 已访问节点集合, 用于DAG去重剪枝
 		for (const auto &root : roots) {
 			std::vector<const starlight_v3::tspm::EvidenceTree *> path;
-			walk_node(root.get(), path, dist, efg);
+			walk_node(root.get(), path, dist, efg, visited);
 		}
 	}
 
@@ -140,14 +148,19 @@ public:
 private:
 	/**
 	 * @brief 递归遍历单个证据树节点, 每到达一个带权重节点即完成一条链
+	 * @details 每个节点仅处理一次(visited去重), 已访问节点直接返回, 保证遍历复杂度为O(节点数)
 	 */
-	void walk_node(const starlight_v3::tspm::EvidenceTree *node, std::vector<const starlight_v3::tspm::EvidenceTree *> &path, const std::vector<starlight_v3::SIZE_T> &dist, const starlight_v3::EFG &efg) {
+	void walk_node(const starlight_v3::tspm::EvidenceTree *node, std::vector<const starlight_v3::tspm::EvidenceTree *> &path, const std::vector<starlight_v3::SIZE_T> &dist, const starlight_v3::EFG &efg, std::unordered_set<const starlight_v3::tspm::EvidenceTree *> &visited) {
+		// DAG去重: 当前节点已访问过则直接返回, 不重复统计
+		if (!visited.insert(node).second) {
+			return;
+		}
 		path.push_back(node);
 		if (!starlight_v3::near_zero(node->weight)) { // 带权重节点 = 链终止节点
 			collect_chain(path, dist, efg);
 		} else { // 中间节点(含跳过节点), 继续向下遍历
 			for (const auto &child : node->sub_nodes) {
-				walk_node(child.get(), path, dist, efg);
+				walk_node(child.get(), path, dist, efg, visited);
 			}
 		}
 		path.pop_back();

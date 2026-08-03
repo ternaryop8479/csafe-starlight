@@ -562,6 +562,24 @@ int import_callback(void *ctx, const peparse::VA &, const std::string &module, c
 	return 0;
 }
 
+/**
+ * @brief parsed_pe的RAII守卫, 任何退出路径(含异常)都会释放pe-parse分配的内存
+ */
+class ParsedPEGuard {
+public:
+	explicit ParsedPEGuard(peparse::parsed_pe *pe) : pe_(pe) {}
+	~ParsedPEGuard() {
+		if (pe_ != nullptr) {
+			peparse::DestructParsedPE(pe_);
+		}
+	}
+	ParsedPEGuard(const ParsedPEGuard &) = delete;
+	ParsedPEGuard &operator=(const ParsedPEGuard &) = delete;
+
+private:
+	peparse::parsed_pe *pe_;
+};
+
 } // namespace
 
 namespace starlight_v3::lgbm {
@@ -574,6 +592,7 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 	if (pe == nullptr) {
 		return feats; // 非PE格式或损坏到无意义, 返回全零
 	}
+	ParsedPEGuard pe_guard(pe); // RAII: 任何退出路径(含异常)都释放pe-parse分配的内存
 
 	// ---- PE头特征(29维) ----
 	const peparse::file_header &file_header = pe->peHeader.nt.FileHeader;
@@ -725,7 +744,9 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 	feats.section_entropy_max = entropy_max;
 	feats.section_entropy_min = entropy_min;
 	double entropy_avg = feats.section_entropy_mean;
-	feats.section_entropy_std = section_count > 0 ? std::sqrt(entropy_sq_sum / (double)section_count - entropy_avg * entropy_avg) : 0.0;
+	// 注意: mean(x^2)-mean(x)^2在浮点舍入下可能为极小负值, clamp到0防止sqrt产生NaN
+	double entropy_variance = section_count > 0 ? std::max(0.0, entropy_sq_sum / (double)section_count - entropy_avg * entropy_avg) : 0.0;
+	feats.section_entropy_std = std::sqrt(entropy_variance);
 	feats.text_section_entropy = text_entropy;
 	feats.high_entropy_section_count = 0;
 	for (SIZE_T i = 0; i < section_count; ++i) {
@@ -881,7 +902,6 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 	const peparse::rich_header &rich = pe->peHeader.rich;
 	feats.rich_header_entry_count = (rich.isPresent && rich.isValid) ? (SIZE_T)rich.Entries.size() : 0;
 
-	peparse::DestructParsedPE(pe);
 	return feats;
 }
 

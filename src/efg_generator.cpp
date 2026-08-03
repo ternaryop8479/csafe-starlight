@@ -153,13 +153,16 @@ bool PEParser::parse() {
 
 	try {
 		peparse::IterImpVAString(impl_->pe_, &Impl::import_callback, impl_.get());
-	} catch (const std::range_error &e) {
+	} catch (const std::exception &e) {
 		// 如果解析到一半出错了，就保留已经解析出来的导入表
+		// 注意: pe-parse可能抛出range_error/length_error/logic_error等, 统一在最小作用域内消化,
+		// 防止恶意构造的PE文件异常逃逸导致整个推理/训练流程中断
 	}
 	try {
 		peparse::IterSec(impl_->pe_, &Impl::section_callback, impl_.get());
-	} catch (const std::range_error &e) {
+	} catch (const std::exception &e) {
 		// 如果解析到一半出错了，就保留已经解析出来的节段
+		// 同上: 统一消化pe-parse的各类STL异常
 	}
 	return true;
 }

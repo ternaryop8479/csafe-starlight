@@ -108,6 +108,10 @@ starlight_v3::SIZE_T bfs_component_size(const starlight_v3::EFG &efg, starlight_
 		++count;
 		for (starlight_v3::SIZE_T e = efg.offeset_[current]; e < efg.offeset_[current + 1]; ++e) {
 			starlight_v3::SIZE_T next = (starlight_v3::SIZE_T)efg.edges_[e].to_node_index;
+			// 防御: to_node_index越界时跳过, 防止外部构造的畸形EFG触发越界写
+			if (next >= visited.size()) {
+				continue;
+			}
 			if (visited[next] != mark) {
 				visited[next] = mark;
 				stack.push_back(next);
@@ -129,7 +133,13 @@ EFGFeatPack extract_efg_feats(const EFG &efg) {
 	feats.node_count = node_count;
 	feats.edge_count = edge_count;
 
-	if (node_count == 0 || edge_count == 0) {
+	// 无边EFG(有节点但无调用边, 如.NET程序)的语义: 全部节点出度为0(孤立), 入口分量仅含节点0
+	if (node_count == 0) {
+		return feats;
+	}
+	if (edge_count == 0) {
+		feats.isolated_node_count = node_count;
+		feats.largest_component_ratio = 1.0 / (double)node_count;
 		return feats;
 	}
 

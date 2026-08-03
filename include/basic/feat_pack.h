@@ -68,6 +68,9 @@ struct TSPMFeatPack { // 累死我了呜呜呜呜
 
 	// 引擎最终输出
 	double tspm_score; ///< tosSPM引擎输出的最终权重
+
+	// 结构体字段数, 与feat_vector.cpp中TSPM_FEAT_FIELDS宏的维度数编译期对齐, 防止字段遗漏
+	static constexpr SIZE_T kFieldCount = 43;
 };
 
 /**
@@ -116,6 +119,9 @@ struct EFGFeatPack {
 	double max_indirect_jmp_with_data; ///< 携带数据的边的最大间接跳转次数
 	double indirect_jmp_with_data_var; ///< 携带数据的边的间接跳转次数方差
 	double indirect_jmp_with_data_ske; ///< 携带数据的边的间接跳转次数偏度
+
+	// 结构体字段数, 与feat_vector.cpp中EFG_FEAT_FIELDS宏的维度数编译期对齐, 防止字段遗漏
+	static constexpr SIZE_T kFieldCount = 39;
 };
 
 /**
@@ -222,6 +228,9 @@ struct PEFeatPack {
 	bool debug_present; ///< 是否存在调试目录
 	bool resource_present; ///< 是否存在资源目录
 	SIZE_T rich_header_entry_count; ///< Rich Header条目数(编译器指纹)
+
+	// 结构体字段数, 与feat_vector.cpp中PE_FEAT_FIELDS宏的维度数编译期对齐, 防止字段遗漏
+	static constexpr SIZE_T kFieldCount = 89;
 };
 
 /**
