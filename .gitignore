@@ -9,3 +9,6 @@ build/
 
 # 训练配置
 train.conf
+
+# LSP配置
+.clang*
