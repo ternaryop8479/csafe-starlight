@@ -109,16 +109,16 @@ tspm::Model deserialize_tspm_model(BufferReader &reader) {
 	// API映射表
 	uint64_t table_size = 0;
 	if (!reader.get(table_size)) {
-		throw std::runtime_error("Model::load_from_file(): tosSPM段损坏(API表数量)");
+		throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (api table count)");
 	}
 	// 防御: 每个API名至少4字节长度前缀+1字节内容, 数量超界说明文件被篡改, 避免触发超大分配(bad_alloc/length_error)
 	if (table_size > static_cast<uint64_t>(reader.end - reader.ptr) / 5u) {
-		throw std::runtime_error("Model::load_from_file(): tosSPM段损坏(API表数量超出剩余数据范围)");
+		throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (api table count exceeds remaining data)");
 	}
 	std::vector<std::string> names(static_cast<size_t>(table_size));
 	for (uint64_t i = 0; i < table_size; ++i) {
 		if (!reader.get_string(names[static_cast<size_t>(i)])) {
-			throw std::runtime_error("Model::load_from_file(): tosSPM段损坏(API表内容)");
+			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (api table content)");
 		}
 	}
 	model.api_table = APITable(names);
@@ -126,18 +126,18 @@ tspm::Model deserialize_tspm_model(BufferReader &reader) {
 	// Trie树节点
 	uint64_t node_count = 0;
 	if (!reader.get(node_count)) {
-		throw std::runtime_error("Model::load_from_file(): tosSPM段损坏(节点数量)");
+		throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (node count)");
 	}
 	// 防御: 每个节点固定28字节, 数量超界说明文件被篡改
 	if (node_count > static_cast<uint64_t>(reader.end - reader.ptr) / 28u) {
-		throw std::runtime_error("Model::load_from_file(): tosSPM段损坏(节点数量超出剩余数据范围)");
+		throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (node count exceeds remaining data)");
 	}
 	model.nodes.resize(static_cast<size_t>(node_count));
 	for (uint64_t i = 0; i < node_count; ++i) {
 		tspm::TrieNode &node = model.nodes[static_cast<size_t>(i)];
 		uint32_t api_id = 0, trans_start = 0, trans_count = 0;
 		if (!reader.get(api_id) || !reader.get(trans_start) || !reader.get(trans_count) || !reader.get(node.weight)) {
-			throw std::runtime_error("Model::load_from_file(): tosSPM段损坏(节点内容)");
+			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (node content)");
 		}
 		node.api_id = api_id;
 		node.trans_start = trans_start;
@@ -147,39 +147,39 @@ tspm::Model deserialize_tspm_model(BufferReader &reader) {
 	// Trie树边列表
 	uint64_t edge_count = 0;
 	if (!reader.get(edge_count)) {
-		throw std::runtime_error("Model::load_from_file(): tosSPM段损坏(边数量)");
+		throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (edge count)");
 	}
 	// 防御: 每条边固定4字节, 数量超界说明文件被篡改
 	if (edge_count > static_cast<uint64_t>(reader.end - reader.ptr) / 4u) {
-		throw std::runtime_error("Model::load_from_file(): tosSPM段损坏(边数量超出剩余数据范围)");
+		throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (edge count exceeds remaining data)");
 	}
 	model.edges.resize(static_cast<size_t>(edge_count));
 	for (uint64_t i = 0; i < edge_count; ++i) {
 		uint32_t edge = 0;
 		if (!reader.get(edge)) {
-			throw std::runtime_error("Model::load_from_file(): tosSPM段损坏(边内容)");
+			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (edge content)");
 		}
 		model.edges[static_cast<size_t>(i)] = edge;
 	}
 
 	// 模型参数
 	if (!reader.get(model.max_skip)) {
-		throw std::runtime_error("Model::load_from_file(): tosSPM段损坏(模型参数)");
+		throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (model parameter)");
 	}
 
 	// 语义校验: 防止损坏/篡改的模型文件导致推理时越界读
 	// 注意: Trie根节点的api_id为INVALID_NUM(哨兵值, 见src/tspm/trainer.cpp的模型生成), 需放行
 	for (const tspm::TrieNode &node : model.nodes) {
 		if (node.api_id != starlight_v3::INVALID_NUM && node.api_id >= names.size()) {
-			throw std::runtime_error("Model::load_from_file(): tosSPM段损坏(节点api_id超出API表范围)");
+			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (node api_id out of api table range)");
 		}
 		if (static_cast<uint64_t>(node.trans_start) + static_cast<uint64_t>(node.trans_count) > model.edges.size()) {
-			throw std::runtime_error("Model::load_from_file(): tosSPM段损坏(节点边区间超出边列表范围)");
+			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (node edge range out of edge list)");
 		}
 	}
 	for (SIZE_T edge : model.edges) {
 		if (edge >= node_count) {
-			throw std::runtime_error("Model::load_from_file(): tosSPM段损坏(边指向不存在的节点)");
+			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (edge points to nonexistent node)");
 		}
 	}
 
@@ -211,11 +211,11 @@ void Model::save_to_file(const std::string &path) const {
 	// 一次性写入文件
 	std::ofstream ofs(path, std::ios::binary);
 	if (!ofs.is_open()) {
-		throw std::runtime_error("Model::save_to_file(): 无法打开文件: " + path);
+		throw std::runtime_error("Model::save_to_file(): cannot open file: " + path);
 	}
 	ofs.write(content.data(), static_cast<std::streamsize>(content.size()));
 	if (!ofs.good()) {
-		throw std::runtime_error("Model::save_to_file(): 写入文件失败: " + path);
+		throw std::runtime_error("Model::save_to_file(): write failed: " + path);
 	}
 }
 
@@ -224,7 +224,7 @@ Model Model::load_from_file(const std::string &path) {
 	// 读取整个文件内容
 	std::ifstream ifs(path, std::ios::binary);
 	if (!ifs.is_open()) {
-		throw std::runtime_error("Model::load_from_file(): 无法打开文件: " + path);
+		throw std::runtime_error("Model::load_from_file(): cannot open file: " + path);
 	}
 	std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
 
@@ -233,45 +233,45 @@ Model Model::load_from_file(const std::string &path) {
 	// 校验魔数
 	char magic[sizeof(kModelMagic)];
 	if (!reader.get(magic) || std::memcmp(magic, kModelMagic, sizeof(kModelMagic)) != 0) {
-		throw std::runtime_error("Model::load_from_file(): 魔数不符, 不是合法的模型文件: " + path);
+		throw std::runtime_error("Model::load_from_file(): bad magic, not a valid model file: " + path);
 	}
 
 	// 校验版本号
 	uint32_t version = 0;
 	if (!reader.get(version)) {
-		throw std::runtime_error("Model::load_from_file(): 文件损坏(版本号)");
+		throw std::runtime_error("Model::load_from_file(): file corrupted (version)");
 	}
 	if (version != kModelVersion) {
-		throw std::runtime_error("Model::load_from_file(): 版本不符, 期望版本" + std::to_string(kModelVersion) + ", 实际" + std::to_string(version));
+		throw std::runtime_error("Model::load_from_file(): version mismatch, expected " + std::to_string(kModelVersion) + ", got " + std::to_string(version));
 	}
 
 	// 读取tosSPM段
 	uint64_t tspm_len = 0;
 	if (!reader.get(tspm_len)) {
-		throw std::runtime_error("Model::load_from_file(): 文件损坏(tosSPM段长度)");
+		throw std::runtime_error("Model::load_from_file(): file corrupted (tosSPM section length)");
 	}
 	if (reader.ptr + tspm_len > reader.end) {
-		throw std::runtime_error("Model::load_from_file(): 文件损坏(tosSPM段越界)");
+		throw std::runtime_error("Model::load_from_file(): file corrupted (tosSPM section out of range)");
 	}
 	const char *tspm_end = reader.ptr + tspm_len;
 	Model model;
 	model.tspm_model_ = deserialize_tspm_model(reader);
 	if (reader.ptr != tspm_end) {
-		throw std::runtime_error("Model::load_from_file(): tosSPM段长度与内容不一致");
+		throw std::runtime_error("Model::load_from_file(): tosSPM section length does not match content");
 	}
 
 	// 读取LightGBM段
 	uint64_t lgbm_len = 0;
 	if (!reader.get(lgbm_len)) {
-		throw std::runtime_error("Model::load_from_file(): 文件损坏(LightGBM段长度)");
+		throw std::runtime_error("Model::load_from_file(): file corrupted (LightGBM section length)");
 	}
 	if (reader.ptr + lgbm_len > reader.end) {
-		throw std::runtime_error("Model::load_from_file(): 文件损坏(LightGBM段越界)");
+		throw std::runtime_error("Model::load_from_file(): file corrupted (LightGBM section out of range)");
 	}
 	model.lgbm_model_.model_string.assign(reader.ptr, lgbm_len);
 	reader.ptr += lgbm_len;
 	if (reader.ptr != reader.end) {
-		throw std::runtime_error("Model::load_from_file(): 文件末尾存在多余数据");
+		throw std::runtime_error("Model::load_from_file(): trailing data at end of file");
 	}
 
 	return model;

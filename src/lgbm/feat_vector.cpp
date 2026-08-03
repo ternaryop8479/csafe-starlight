@@ -75,13 +75,13 @@
 
 // 用于编译期统计维度数的宏
 #define FEAT_COUNT_ONE(name) +1
-static_assert(0 EFG_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kEfgFeatDims, "EFGFeatPack维度与宏列表不一致");
-static_assert(0 TSPM_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kTspmFeatDims, "TSPMFeatPack维度与宏列表不一致");
-static_assert(0 PE_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kPeFeatDims, "PEFeatPack维度与宏列表不一致");
+static_assert(0 EFG_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kEfgFeatDims, "EFGFeatPack field count does not match EFG_FEAT_FIELDS macro");
+static_assert(0 TSPM_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kTspmFeatDims, "TSPMFeatPack field count does not match TSPM_FEAT_FIELDS macro");
+static_assert(0 PE_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kPeFeatDims, "PEFeatPack field count does not match PE_FEAT_FIELDS macro");
 // 结构体字段数与宏维度数对齐(防止向结构体新增字段但遗漏同步宏时静默丢维度)
-static_assert(starlight_v3::EFGFeatPack::kFieldCount == starlight_v3::lgbm::kEfgFeatDims, "EFGFeatPack新增字段但未同步EFG_FEAT_FIELDS宏");
-static_assert(starlight_v3::TSPMFeatPack::kFieldCount == starlight_v3::lgbm::kTspmFeatDims, "TSPMFeatPack新增字段但未同步TSPM_FEAT_FIELDS宏");
-static_assert(starlight_v3::PEFeatPack::kFieldCount == starlight_v3::lgbm::kPeFeatDims, "PEFeatPack新增字段但未同步PE_FEAT_FIELDS宏");
+static_assert(starlight_v3::EFGFeatPack::kFieldCount == starlight_v3::lgbm::kEfgFeatDims, "EFGFeatPack got new fields but EFG_FEAT_FIELDS macro not synced");
+static_assert(starlight_v3::TSPMFeatPack::kFieldCount == starlight_v3::lgbm::kTspmFeatDims, "TSPMFeatPack got new fields but TSPM_FEAT_FIELDS macro not synced");
+static_assert(starlight_v3::PEFeatPack::kFieldCount == starlight_v3::lgbm::kPeFeatDims, "PEFeatPack got new fields but PE_FEAT_FIELDS macro not synced");
 #undef FEAT_COUNT_ONE
 
 namespace starlight_v3::lgbm {

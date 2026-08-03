@@ -166,7 +166,7 @@ AnalysisResult Reasoner::analyze_efg(const EFG &efg, const std::string &file_pat
 AnalysisResult Reasoner::analyze_file(const std::string &file_path) {
 	auto [success, efg] = generate_efg(file_path);
 	if (!success) {
-		throw std::runtime_error("Reasoner::analyze_file(): EFG生成失败, 文件可能不是合法的PE格式: " + file_path);
+		throw std::runtime_error("Reasoner::analyze_file(): EFG generation failed, file is not a valid PE: " + file_path);
 	}
 	return analyze_efg(efg, file_path);
 }

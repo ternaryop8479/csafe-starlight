@@ -20,6 +20,7 @@ const SIZE_T INVALID_NUM = std::numeric_limits<SIZE_T>::max(); // 以该类型�
 
 // 浮点数计算部分
 const double EPSILON = 1e-8;
+
 /**
  * @brief 判断一个浮点数是否趋近于0
  * @param k 目标浮点数

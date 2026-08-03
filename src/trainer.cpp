@@ -44,12 +44,12 @@ starlight_v3::tspm::Model train_tspm_filtered(starlight_v3::tspm::Trainer &train
 	size_t dropped_mal = drop_edgeless(malware);
 	size_t dropped_ben = drop_edgeless(benign);
 	if (log_callback) {
-		log_callback("[train_tspm_filtered] 剔除无边EFG: 恶意" + std::to_string(dropped_mal) + "个, 良性" + std::to_string(dropped_ben) + "个\n");
+		log_callback("[train_tspm_filtered] Dropped edgeless EFGs: " + std::to_string(dropped_mal) + " malware, " + std::to_string(dropped_ben) + " benign\n");
 	}
 
 	// 剔除后数据集不能为空
 	if (malware.empty() || benign.empty()) {
-		throw std::runtime_error("train_tspm_filtered(): 剔除无边EFG后训练集为空(恶意" + std::to_string(malware.size()) + "个, 良性" + std::to_string(benign.size()) + "个)");
+		throw std::runtime_error("train_tspm_filtered(): training set empty after dropping edgeless EFGs (" + std::to_string(malware.size()) + " malware, " + std::to_string(benign.size()) + " benign)");
 	}
 
 	return trainer.train(malware, benign);
@@ -82,10 +82,10 @@ namespace starlight_v3 {
 Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &malware_samples, const std::vector<TrainSample> &benign_samples) {
 	// 参数校验
 	if (config.cross_validation_k < 2) {
-		throw std::invalid_argument("Trainer::train(): cross_validation_k必须不小于2");
+		throw std::invalid_argument("Trainer::train(): cross_validation_k must be at least 2");
 	}
 	if (malware_samples.empty() || benign_samples.empty()) {
-		throw std::invalid_argument("Trainer::train(): 黑白数据集均不能为空");
+		throw std::invalid_argument("Trainer::train(): both malware and benign datasets must be non-empty");
 	}
 
 	// 日志回调缺省为空回调, 避免匿名命名空间函数中判空
@@ -127,13 +127,13 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 		}
 
 		// 3b. 训练本折的tosSPM模型(拷贝+剔除无边EFG)
-		log_callback("[Trainer::train()] 交叉训练第" + std::to_string(fold + 1) + "/" + std::to_string(config.cross_validation_k) + "折\n");
+		log_callback("[Trainer::train()] Cross-validation fold " + std::to_string(fold + 1) + "/" + std::to_string(config.cross_validation_k) + "\n");
 		tspm::Trainer tspm_trainer(config.tspm_config, log_callback);
 		tspm::Model tspm_model = train_tspm_filtered(tspm_trainer, log_callback, std::move(train_mal), std::move(train_ben));
 
 		// 3c. 用本折模型对测试折样本并行推理, 生成特征向量写入特征矩阵
 		// 注意: 测试折不剔除无边EFG, 对无边EFG正常推理, 供LightGBM学习无边样本的形态
-		log_callback("[Trainer::train()] 推理第" + std::to_string(fold + 1) + "折特征(恶意" + std::to_string(mal_folds[static_cast<size_t>(fold)].size()) + "个, 良性" + std::to_string(ben_folds[static_cast<size_t>(fold)].size()) + "个)\n");
+		log_callback("[Trainer::train()] Inferring fold " + std::to_string(fold + 1) + " features (" + std::to_string(mal_folds[static_cast<size_t>(fold)].size()) + " malware, " + std::to_string(ben_folds[static_cast<size_t>(fold)].size()) + " benign)\n");
 		for (size_t idx : mal_folds[static_cast<size_t>(fold)]) {
 			thread_pool.detach_task([&, idx] {
 				const TrainSample &sample = malware_samples[idx];
@@ -151,10 +151,10 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 				} catch (const std::exception &e) {
 					// 线程池会吞掉任务异常, 这里显式上报防止该样本特征静默全零进入训练
 					++feature_fail_count;
-					log_callback("[Trainer::train()] 恶意样本特征生成失败(行" + std::to_string(idx) + ", 特征将保持全零): " + sample.file_path + " -> " + e.what() + "\n");
+					log_callback("[Trainer::train()] Malware feature generation failed (row " + std::to_string(idx) + ", features will stay zero): " + sample.file_path + " -> " + e.what() + "\n");
 				} catch (...) {
 					++feature_fail_count;
-					log_callback("[Trainer::train()] 恶意样本特征生成失败(行" + std::to_string(idx) + ", 特征将保持全零): " + sample.file_path + " -> 未知异常\n");
+					log_callback("[Trainer::train()] Malware feature generation failed (row " + std::to_string(idx) + ", features will stay zero): " + sample.file_path + " -> unknown exception\n");
 				}
 			});
 		}
@@ -172,10 +172,10 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					lgbm::serialize_feat_pack(feats, feature_matrix.data() + (mal_count + idx) * lgbm::kTotalFeatDims);
 				} catch (const std::exception &e) {
 					++feature_fail_count;
-					log_callback("[Trainer::train()] 良性样本特征生成失败(行" + std::to_string(mal_count + idx) + ", 特征将保持全零): " + sample.file_path + " -> " + e.what() + "\n");
+					log_callback("[Trainer::train()] Benign feature generation failed (row " + std::to_string(mal_count + idx) + ", features will stay zero): " + sample.file_path + " -> " + e.what() + "\n");
 				} catch (...) {
 					++feature_fail_count;
-					log_callback("[Trainer::train()] 良性样本特征生成失败(行" + std::to_string(mal_count + idx) + ", 特征将保持全零): " + sample.file_path + " -> 未知异常\n");
+					log_callback("[Trainer::train()] Benign feature generation failed (row " + std::to_string(mal_count + idx) + ", features will stay zero): " + sample.file_path + " -> unknown exception\n");
 				}
 			});
 		}
@@ -186,14 +186,14 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 
 	// 4. 使用全部特征向量训练LightGBM模型
 	if (feature_fail_count.load() > 0) {
-		log_callback("[Trainer::train()] 警告: " + std::to_string(feature_fail_count.load()) + "个样本特征生成失败, 其特征保持全零\n");
+		log_callback("[Trainer::train()] WARNING: " + std::to_string(feature_fail_count.load()) + " samples failed feature generation, their features stay zero\n");
 	}
-	log_callback("[Trainer::train()] 开始训练LightGBM模型(共" + std::to_string(total_samples) + "个样本, " + std::to_string(lgbm::kTotalFeatDims) + "维特征)\n");
+	log_callback("[Trainer::train()] Starting LightGBM training (" + std::to_string(total_samples) + " samples, " + std::to_string(lgbm::kTotalFeatDims) + " features)\n");
 	lgbm::Trainer lgbm_trainer;
 	lgbm::Model lgbm_model = lgbm_trainer.train(feature_matrix.data(), static_cast<int32_t>(total_samples), static_cast<int32_t>(lgbm::kTotalFeatDims), labels.data(), config.lgbm_config);
 
 	// 5. 使用全量数据训练最终tosSPM模型(同样剔除无边EFG)
-	log_callback("[Trainer::train()] 开始全量训练最终tosSPM模型\n");
+	log_callback("[Trainer::train()] Starting full-data final tosSPM training\n");
 	std::vector<EFG> all_mal, all_ben;
 	all_mal.reserve(mal_count);
 	all_ben.reserve(benign_samples.size());
@@ -207,7 +207,7 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 	tspm::Model final_tspm_model = train_tspm_filtered(final_tspm_trainer, log_callback, std::move(all_mal), std::move(all_ben));
 
 	// 6. 打包返回
-	log_callback("[Trainer::train()] 训练完成\n");
+	log_callback("[Trainer::train()] Training complete\n");
 	return Model(final_tspm_model, lgbm_model);
 }
 

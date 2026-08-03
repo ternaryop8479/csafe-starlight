@@ -38,7 +38,7 @@ static std::string build_lgbm_params(const LGBMConfig &config) {
 
 Model Trainer::train(const double *feature_matrix, int32_t nrows, int32_t ncols, const float *labels, const LGBMConfig &config) {
 	if (feature_matrix == nullptr || labels == nullptr || nrows <= 0 || ncols <= 0) {
-		throw std::invalid_argument("Trainer::train(): 非法参数(特征矩阵/标签为空或行数列数非正)");
+		throw std::invalid_argument("Trainer::train(): invalid argument (null feature_matrix/labels or non-positive rows/cols)");
 	}
 
 	// 按标签分层划分训练集与验证集(正类与负类各自独立洗牌后再按validation_ratio切分)

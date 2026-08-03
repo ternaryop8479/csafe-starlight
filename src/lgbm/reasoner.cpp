@@ -25,7 +25,7 @@ double Reasoner::predict(const double *features, int32_t ncols) {
 	int64_t out_len = 1;
 	detail::check_lgbm_status(LGBM_BoosterPredictForMat(booster_.handle, features, C_API_DTYPE_FLOAT64, 1, ncols, 1, C_API_PREDICT_NORMAL, 0, -1, "", &out_len, &out_result));
 	if (out_len != 1) {
-		throw std::runtime_error("Reasoner::predict(): 预测输出长度异常, 期望1个输出, 实际" + std::to_string(out_len));
+		throw std::runtime_error("Reasoner::predict(): unexpected output length, expected 1, got " + std::to_string(out_len));
 	}
 	return out_result;
 }

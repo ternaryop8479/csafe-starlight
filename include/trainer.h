@@ -3,6 +3,7 @@
  * @brief 最终训练器接口声明(交叉训练编排层)
  * @author ternaryop8479
  * @date 2026-08-03
+ * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  */
 
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_TRAINER_H

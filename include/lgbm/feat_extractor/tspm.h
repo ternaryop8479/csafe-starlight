@@ -3,6 +3,7 @@
  * @brief tosSPM推理结果的特征提取器
  * @author ternaryop8479
  * @date 2026-08-02
+ * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  */
 
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_LGBM_FEAT_EXTRACTOR_TSPM_H
