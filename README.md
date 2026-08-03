@@ -95,6 +95,9 @@ starlight_v3 infer <model_path> <target> [max_samples]
 ./build/starlight_v3 infer ./model.sv3.db ./samples/
 ```
 
+## 模型下载
+详见[模型列表](ModelList.md)。
+
 ## 接口文档
 
 引擎静态库(模型序列化、Reasoner 推理、Trainer 训练、特征提取)的详细接口文档见：<接口文档链接待补充>
