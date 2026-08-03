@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <malloc.h>
 #include <numeric>
 #include <random>
 #include <thread>
@@ -144,6 +145,10 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					FeatPack feats;
 					feats.efg_feats = lgbm::extract_efg_feats(sample.efg);
 					feats.tspm_feats = lgbm::extract_tspm_feats(result, sample.efg);
+					// 证据树在特征提取后立即释放(extract_tspm_feats为只读遍历, 提取完不再需要),
+					// 否则并行任务会同时驻留大量证据树导致内存爆炸
+					result.evidence_trees.clear();
+					result.evidence_trees.shrink_to_fit();
 					feats.pe_feats = lgbm::extract_pe_feats(sample.file_path);
 					lgbm::serialize_feat_pack(feats, feature_matrix.data() + idx * lgbm::kTotalFeatDims);
 				} catch (const std::exception &e) {
@@ -166,6 +171,9 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					FeatPack feats;
 					feats.efg_feats = lgbm::extract_efg_feats(sample.efg);
 					feats.tspm_feats = lgbm::extract_tspm_feats(result, sample.efg);
+					// 证据树在特征提取后立即释放(与恶意样本任务同理)
+					result.evidence_trees.clear();
+					result.evidence_trees.shrink_to_fit();
 					feats.pe_feats = lgbm::extract_pe_feats(sample.file_path);
 					lgbm::serialize_feat_pack(feats, feature_matrix.data() + (mal_count + idx) * lgbm::kTotalFeatDims);
 				} catch (const std::exception &e) {
@@ -179,13 +187,17 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 		}
 		thread_pool.wait();
 
-		// 本折的tspm_model与reasoner在作用域结束时析构, 释放Trie树与证据树内存
+		// 归还碎片堆内存
+		malloc_trim(0);
 	}
 
 	// 使用全部特征向量训练LightGBM模型
 	if (feature_fail_count.load() > 0) {
 		log_callback("[Trainer::train()] WARNING: " + std::to_string(feature_fail_count.load()) + " samples failed feature generation, their features stay zero\n");
 	}
+
+	// 归还碎片堆内存
+	malloc_trim(0);
 	log_callback("[Trainer::train()] Starting LightGBM training (" + std::to_string(total_samples) + " samples, " + std::to_string(lgbm::kTotalFeatDims) + " features)\n");
 	lgbm::Trainer lgbm_trainer;
 	lgbm::Model lgbm_model = lgbm_trainer.train(feature_matrix.data(), static_cast<int32_t>(total_samples), static_cast<int32_t>(lgbm::kTotalFeatDims), labels.data(), config.lgbm_config);
@@ -203,6 +215,8 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 	}
 	tspm::Trainer final_tspm_trainer(config.tspm_config, log_callback);
 	tspm::Model final_tspm_model = train_tspm_filtered(final_tspm_trainer, log_callback, std::move(all_mal), std::move(all_ben));
+	// 归还碎片堆内存
+	malloc_trim(0);
 
 	// 打包返回
 	log_callback("[Trainer::train()] Training complete\n");
