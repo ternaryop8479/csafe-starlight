@@ -191,15 +191,14 @@ std::vector<starlight_v3::TrainSample> make_samples(const std::vector<starlight_
 	return samples;
 }
 
-// 加载模型文件到model引用: 成功返回true并打印模型概要, 失败(损坏/无法打开)打印错误返回false
+// 加载模型文件到model: 成功返回true并打印模型概要(含版本), 失败返回false
 bool load_model(const std::string &model_path, starlight_v3::Model &model) {
-	try {
-		model = starlight_v3::Model::load_from_file(model_path);
-	} catch (const std::exception &e) {
-		std::cerr << "[Error] 模型加载失败: " << e.what() << std::endl;
+	if (!model.load_from_file(model_path)) {
+		std::cerr << "[Error] 模型加载失败: " << model_path << std::endl;
 		return false;
 	}
-	std::cout << "[Info] 模型加载完成: tspm节点=" << model.tspm_model().nodes.size()
+	std::cout << "[Info] 模型加载完成: 版本=" << model.get_version()
+			  << ", tspm节点=" << model.tspm_model().nodes.size()
 			  << ", lgbm模型=" << model.lgbm_model().model_string.size() << "字节" << std::endl;
 	return true;
 }
@@ -207,7 +206,7 @@ bool load_model(const std::string &model_path, starlight_v3::Model &model) {
 // 训练模式入口, 整体流程: 加载黑白数据集 -> 绑定样本 -> 配置训练参数 ->
 // 交叉训练生成特征 -> LightGBM训练 -> 最终tosSPM全量训练 -> 保存模型 -> 重新加载验证.
 // 返回0成功, 非0失败.
-int run_train(const std::string &malware_folder, const std::string &benign_folder, const std::string &model_path, size_t max_train_samples) {
+int run_train(const std::string &malware_folder, const std::string &benign_folder, const std::string &model_path, size_t max_train_samples, const std::string &version_str) {
 	// 加载训练数据集(同时收集源文件路径, 用于PE特征提取)
 	std::cout << "[Info] 正在加载恶意样本数据集..." << std::endl;
 	std::vector<fs::path> malware_paths, benign_paths;
@@ -270,11 +269,16 @@ int run_train(const std::string &malware_folder, const std::string &benign_folde
 	starlight_v3::Trainer trainer;
 	starlight_v3::Model model = trainer.train(config, malware_samples, benign_samples);
 
+	// 若指定了版本号(YY.MM.DD形式), 写入模型版本
+	if (!version_str.empty()) {
+		model.change_version(std::stoi(version_str.substr(0, 2)),
+			std::stoi(version_str.substr(3, 2)),
+			std::stoi(version_str.substr(6, 2)));
+	}
+
 	std::cout << "\n[Info] 训练完成, 正在保存模型..." << std::endl;
-	try {
-		model.save_to_file(model_path);
-	} catch (const std::exception &e) {
-		std::cerr << "[Error] 模型保存失败: " << e.what() << std::endl;
+	if (!model.save_to_file(model_path)) {
+		std::cerr << "[Error] 模型保存失败: " << model_path << std::endl;
 		return -1;
 	}
 	std::cout << "[Info] 模型已保存至: " << model_path << std::endl;
@@ -460,12 +464,13 @@ void print_usage(const char *program_name) {
 	std::cout << "CSafe Starlight V3 " << kVersion << " - 杀毒引擎官方训练/跑分/推理工具" << std::endl;
 	std::cout << std::endl;
 	std::cout << "Usage:" << std::endl;
-	std::cout << "  " << program_name << " train <malware_dir> <benign_dir> <model_path> [max_train_samples]" << std::endl;
+	std::cout << "  " << program_name << " train <malware_dir> <benign_dir> <model_path> [max_train_samples] [version]" << std::endl;
 	std::cout << "  " << program_name << " score <model_path> <malware_dir> <benign_dir> [max_score_samples]" << std::endl;
 	std::cout << "  " << program_name << " infer <model_path> <target> [max_samples]" << std::endl;
 	std::cout << std::endl;
 	std::cout << "Subcommands:" << std::endl;
 	std::cout << "  train   训练模型: 交叉训练生成特征 -> LightGBM -> 最终tosSPM全量训练, 保存到model_path" << std::endl;
+	std::cout << "          [version] 可选: 模型版本号(YY.MM.DD形式, 如 26.08.03), 作为病毒库日期标记" << std::endl;
 	std::cout << "  score   跑分: 对黑白样本文件夹分别打分, 输出平均分与判定准确率(用于模型评估)" << std::endl;
 	std::cout << "  infer   推理判定: 对单个PE文件或文件夹(递归)执行恶意/良性判定" << std::endl;
 	std::cout << std::endl;
@@ -498,7 +503,29 @@ int main(int argc, char *argv[]) {
 			return -1;
 		}
 		size_t max_train_samples = parse_size_arg(argc >= 6 ? argv[5] : nullptr, 1000, "max_train_samples");
-		return run_train(argv[2], argv[3], argv[4], max_train_samples);
+		std::string version_str; // 可选第6个参数: 模型版本(YY.MM.DD形式)
+		if (argc >= 7) {
+			version_str = argv[6];
+			// 校验格式: 必须为 YY.MM.DD (2位数字.2位数字.2位数字)
+			// 同时校验数字合法性, 防止后续stoi抛异常(如"2a.08.03")
+			bool valid_version = version_str.size() == 8 && version_str[2] == '.' && version_str[5] == '.';
+			if (valid_version) {
+				for (size_t vi = 0; vi < version_str.size(); ++vi) {
+					if (vi == 2 || vi == 5) {
+						continue; // 跳过两个点分隔符
+					}
+					if (!std::isdigit(static_cast<unsigned char>(version_str[vi]))) {
+						valid_version = false;
+						break;
+					}
+				}
+			}
+			if (!valid_version) {
+				std::cerr << "[Error] 模型版本必须为 YY.MM.DD 形式(如 26.08.03), 实际: " << version_str << std::endl;
+				return -1;
+			}
+		}
+		return run_train(argv[2], argv[3], argv[4], max_train_samples, version_str);
 	}
 
 	if (mode == "score") {

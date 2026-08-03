@@ -10,14 +10,14 @@
 #include <fstream>
 #include <iterator>
 #include <stdexcept>
+#include <string>
 
 #include "model.h"
 
 namespace {
 
 // 模型文件的魔数与版本号
-constexpr char kModelMagic[8] = { 'C', 'S', 'L', 'G', 'B', 'M', 'V', '1' };
-constexpr uint32_t kModelVersion = 1;
+constexpr char MODEL_MAGIC[8] = { 'C', 'S', 'T', 'A', 'R', 'L', 'V', '3' };
 
 // 二进制写缓冲, 所有写入均使用固定宽度类型(uint32_t/uint64_t/double)
 class BufferWriter {
@@ -196,14 +196,14 @@ Model::Model(const tspm::Model &tspm_model, const lgbm::Model &lgbm_model) : tsp
 }
 
 // 将两个模型一起保存到指定路径
-void Model::save_to_file(const std::string &path) const {
+bool Model::save_to_file(const std::string &path) const {
 	// 先序列化tosSPM段
 	std::string tspm_section = serialize_tspm_model(tspm_model_);
 
 	// 组装最终文件内容
 	std::string content;
-	content.append(kModelMagic, sizeof(kModelMagic));
-	content.append(reinterpret_cast<const char *>(&kModelVersion), sizeof(kModelVersion));
+	content.append(MODEL_MAGIC, sizeof(MODEL_MAGIC));
+	content.append(reinterpret_cast<const char *>(&version_), sizeof(version_));
 	const uint64_t tspm_len = static_cast<uint64_t>(tspm_section.size());
 	content.append(reinterpret_cast<const char *>(&tspm_len), sizeof(tspm_len));
 	content.append(tspm_section);
@@ -214,70 +214,93 @@ void Model::save_to_file(const std::string &path) const {
 	// 一次性写入文件
 	std::ofstream ofs(path, std::ios::binary);
 	if (!ofs.is_open()) {
-		throw std::runtime_error("Model::save_to_file(): cannot open file: " + path);
+		return false;
 	}
 	ofs.write(content.data(), static_cast<std::streamsize>(content.size()));
 	if (!ofs.good()) {
-		throw std::runtime_error("Model::save_to_file(): write failed: " + path);
+		return false;
 	}
+
+	return true;
 }
 
 // 从指定路径加载模型文件
-Model Model::load_from_file(const std::string &path) {
+bool Model::load_from_file(const std::string &path) {
 	// 读取整个文件内容
 	std::ifstream ifs(path, std::ios::binary);
 	if (!ifs.is_open()) {
-		throw std::runtime_error("Model::load_from_file(): cannot open file: " + path);
+		return false;
 	}
 	std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
 
 	BufferReader reader(content);
 
 	// 校验魔数
-	char magic[sizeof(kModelMagic)];
-	if (!reader.get(magic) || std::memcmp(magic, kModelMagic, sizeof(kModelMagic)) != 0) {
-		throw std::runtime_error("Model::load_from_file(): bad magic, not a valid model file: " + path);
+	char magic[sizeof(MODEL_MAGIC)];
+	if (!reader.get(magic) || std::memcmp(magic, MODEL_MAGIC, sizeof(MODEL_MAGIC)) != 0) {
+		return false;
 	}
 
-	// 校验版本号
-	uint32_t version = 0;
-	if (!reader.get(version)) {
-		throw std::runtime_error("Model::load_from_file(): file corrupted (version)");
-	}
-	if (version != kModelVersion) {
-		throw std::runtime_error("Model::load_from_file(): version mismatch, expected " + std::to_string(kModelVersion) + ", got " + std::to_string(version));
+	// 读取版本号(病毒库日期标记), 不校验匹配, 兼容任意日期训练的模型
+	if (!reader.get(version_)) {
+		return false;
 	}
 
 	// 读取tosSPM段
 	uint64_t tspm_len = 0;
 	if (!reader.get(tspm_len)) {
-		throw std::runtime_error("Model::load_from_file(): file corrupted (tosSPM section length)");
+		return false;
 	}
 	if (reader.ptr + tspm_len > reader.end) {
-		throw std::runtime_error("Model::load_from_file(): file corrupted (tosSPM section out of range)");
+		return false;
 	}
 	const char *tspm_end = reader.ptr + tspm_len;
-	Model model;
-	model.tspm_model_ = deserialize_tspm_model(reader);
+	try {
+		tspm_model_ = deserialize_tspm_model(reader);
+	} catch (const std::exception &) {
+		return false;
+	}
 	if (reader.ptr != tspm_end) {
-		throw std::runtime_error("Model::load_from_file(): tosSPM section length does not match content");
+		return false;
 	}
 
 	// 读取LightGBM段
 	uint64_t lgbm_len = 0;
 	if (!reader.get(lgbm_len)) {
-		throw std::runtime_error("Model::load_from_file(): file corrupted (LightGBM section length)");
+		return false;
 	}
 	if (reader.ptr + lgbm_len > reader.end) {
-		throw std::runtime_error("Model::load_from_file(): file corrupted (LightGBM section out of range)");
+		return false;
 	}
-	model.lgbm_model_.model_string.assign(reader.ptr, lgbm_len);
+	lgbm_model_.model_string.assign(reader.ptr, lgbm_len);
 	reader.ptr += lgbm_len;
 	if (reader.ptr != reader.end) {
-		throw std::runtime_error("Model::load_from_file(): trailing data at end of file");
+		return false;
 	}
 
-	return model;
+	return true;
+}
+
+// 设置当前模型版本
+void Model::change_version(int year, int month, int day) {
+	year = year % 100; // 保留年份后两位
+	version_ = year * 10000 + month * 100 + day; // 合成版本时间戳
+}
+
+// 获取当前模型版本
+std::string Model::get_version() const {
+	int year = version_ / 10000, month = version_ % 10000 / 100, day = version_ % 100;
+	// 补零并返回
+	std::string result;
+	result += (year < 10) ? "0" : "";
+	result += std::to_string(year);
+	result += ".";
+	result += (month < 10) ? "0" : "";
+	result += std::to_string(month);
+	result += ".";
+	result += (day < 10) ? "0" : "";
+	result += std::to_string(day);
+	return result;
 }
 
 // 获取内部tosSPM模型

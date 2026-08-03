@@ -38,7 +38,7 @@ void extract_evidence_dot(const AnalysisResult &result, const std::string &filen
 /**
  * @brief 推理器封装
  * @warning model的生命周期必须长于本对象(构造后不得销毁model)，
- * 严禁以临时Model对象构造本类(如Reasoner(Model::load_from_file(...)))，
+ * 严禁以临时Model对象构造本类，
  * 多线程推理时需要每个线程构造一个独立的Reasoner实例
  */
 class Reasoner {

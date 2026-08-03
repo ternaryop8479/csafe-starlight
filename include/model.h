@@ -35,15 +35,34 @@ public:
 	/**
 	 * @brief 将两个模型一起保存到指定路径
 	 * @param path 输出文件路径
+	 * @return 保存是否成功
+	 * @retval true 保存成功
+	 * @retval false 保存失败
 	 */
-	void save_to_file(const std::string &path) const;
+	bool save_to_file(const std::string &path) const;
 
 	/**
 	 * @brief 从指定路径加载模型文件
 	 * @param path 输入文件路径
-	 * @return 加载完成的模型
+	 * @return 加载是否成功
+	 * @retval true 加载成功
+	 * @retval false 加载失败
 	 */
-	static Model load_from_file(const std::string &path);
+	bool load_from_file(const std::string &path);
+
+	/**
+	 * @brief 设置当前模型版本
+	 * @param year 完整或简写的阿拉伯数字年份(即YYYY或YY)
+	 * @param month 两位阿拉伯数字月份(即MM)
+	 * @param day 两位阿拉伯数字日(即DD)
+	 */
+	void change_version(int year, int month, int day);
+
+	/**
+	 * @brief 获取当前模型版本
+	 * @return 当前模型版本字符串，获取失败则为空
+	 */
+	std::string get_version() const;
 
 	/**
 	 * @brief 获取内部tosSPM模型
@@ -60,6 +79,7 @@ public:
 private:
 	tspm::Model tspm_model_; ///< tosSPM模型(Trie树)
 	lgbm::Model lgbm_model_; ///< LightGBM模型
+	SIZE_T version_; ///< 用于标记当前模型训练日期
 };
 
 } // namespace starlight_v3
