@@ -37,7 +37,7 @@
 namespace fs = std::filesystem;
 namespace {
 
-constexpr const char *kVersion = "3.0.0";
+constexpr const char *kVersion = "26.8.3";
 
 // 恶意判定阈值, final_score大于该值判为恶意
 constexpr double kMalwareThreshold = 0.5;
