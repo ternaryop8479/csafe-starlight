@@ -1,0 +1,8 @@
+# CMake 构建目录
+build*/
+build/
+
+# 编译产物
+*.o
+*.a
+*.so
