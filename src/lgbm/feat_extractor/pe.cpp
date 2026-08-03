@@ -6,20 +6,22 @@
  * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  */
 
-#include "lgbm/feat_extractor/pe.h"
-#include "basic/types.h"
-#include <pe-parse/nt-headers.h>
-#include <pe-parse/parse.h>
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+#include <pe-parse/nt-headers.h>
+#include <pe-parse/parse.h>
+
+#include "basic/types.h"
+#include "lgbm/feat_extractor/pe.h"
 
 #ifndef IMAGE_SCN_MEM_EXECUTE
 #define IMAGE_SCN_MEM_EXECUTE 0x20000000
@@ -37,81 +39,217 @@ using starlight_v3::SIZE_T; // 匿名命名空间内使用引擎基础类型
 // ---- 关键词判定表 ----
 // 标准节段名前缀(前缀匹配, 不匹配即视为非标准名称)
 const std::vector<std::string_view> STANDARD_SECTION_PREFIXES = {
-	".text", ".rdata", ".data", ".bss", ".rsrc", ".reloc", ".idata", ".edata",
-	".tls", ".pdata", ".xdata", ".CRT", ".debug", ".didat", ".gfids", ".sdata",
-	".srdata", ".sbss", ".buildid", ".stub", ".textbss",
+	".text",
+	".rdata",
+	".data",
+	".bss",
+	".rsrc",
+	".reloc",
+	".idata",
+	".edata",
+	".tls",
+	".pdata",
+	".xdata",
+	".CRT",
+	".debug",
+	".didat",
+	".gfids",
+	".sdata",
+	".srdata",
+	".sbss",
+	".buildid",
+	".stub",
+	".textbss",
 };
 
 // 进程操作类API
 const std::vector<std::string_view> PROCESS_APIS = {
-	"CreateRemoteThread", "WriteProcessMemory", "ReadProcessMemory", "OpenProcess",
-	"VirtualAllocEx", "VirtualProtectEx", "NtWriteVirtualMemory", "NtReadVirtualMemory",
-	"NtCreateThreadEx", "QueueUserAPC", "SetThreadContext", "ResumeThread",
-	"CreateProcessInternalW", "CreateProcessA", "CreateProcessW", "WinExec",
-	"ShellExecuteA", "ShellExecuteW", "NtUnmapViewOfSection", "TerminateProcess",
-	"SetWindowsHookExA", "SetWindowsHookExW",
+	"CreateRemoteThread",
+	"WriteProcessMemory",
+	"ReadProcessMemory",
+	"OpenProcess",
+	"VirtualAllocEx",
+	"VirtualProtectEx",
+	"NtWriteVirtualMemory",
+	"NtReadVirtualMemory",
+	"NtCreateThreadEx",
+	"QueueUserAPC",
+	"SetThreadContext",
+	"ResumeThread",
+	"CreateProcessInternalW",
+	"CreateProcessA",
+	"CreateProcessW",
+	"WinExec",
+	"ShellExecuteA",
+	"ShellExecuteW",
+	"NtUnmapViewOfSection",
+	"TerminateProcess",
+	"SetWindowsHookExA",
+	"SetWindowsHookExW",
 };
 
 // 网络类API
 const std::vector<std::string_view> NETWORK_APIS = {
-	"WSAStartup", "socket", "connect", "send", "recv", "sendto", "recvfrom",
-	"bind", "listen", "accept", "WSASocketA", "WSASocketW", "getaddrinfo",
-	"gethostbyname", "InternetOpenA", "InternetOpenW", "InternetConnectA",
-	"InternetConnectW", "InternetOpenUrlA", "InternetOpenUrlW", "InternetReadFile",
-	"HttpSendRequestA", "HttpSendRequestW", "URLDownloadToFileA", "URLDownloadToFileW",
-	"WinHttpOpen", "WinHttpConnect", "WinHttpOpenRequest", "WinHttpSendRequest",
-	"WinHttpReceiveResponse", "FtpPutFileA", "FtpPutFileW",
+	"WSAStartup",
+	"socket",
+	"connect",
+	"send",
+	"recv",
+	"sendto",
+	"recvfrom",
+	"bind",
+	"listen",
+	"accept",
+	"WSASocketA",
+	"WSASocketW",
+	"getaddrinfo",
+	"gethostbyname",
+	"InternetOpenA",
+	"InternetOpenW",
+	"InternetConnectA",
+	"InternetConnectW",
+	"InternetOpenUrlA",
+	"InternetOpenUrlW",
+	"InternetReadFile",
+	"HttpSendRequestA",
+	"HttpSendRequestW",
+	"URLDownloadToFileA",
+	"URLDownloadToFileW",
+	"WinHttpOpen",
+	"WinHttpConnect",
+	"WinHttpOpenRequest",
+	"WinHttpSendRequest",
+	"WinHttpReceiveResponse",
+	"FtpPutFileA",
+	"FtpPutFileW",
 };
 
 // 加密类API
 const std::vector<std::string_view> CRYPTO_APIS = {
-	"CryptEncrypt", "CryptDecrypt", "CryptGenKey", "CryptAcquireContextA",
-	"CryptAcquireContextW", "CryptCreateHash", "CryptHashData", "CryptDeriveKey",
-	"CryptExportKey", "CryptImportKey", "CryptDestroyKey", "BCryptEncrypt",
-	"BCryptDecrypt", "BCryptGenerateSymmetricKey", "BCryptHashData",
+	"CryptEncrypt",
+	"CryptDecrypt",
+	"CryptGenKey",
+	"CryptAcquireContextA",
+	"CryptAcquireContextW",
+	"CryptCreateHash",
+	"CryptHashData",
+	"CryptDeriveKey",
+	"CryptExportKey",
+	"CryptImportKey",
+	"CryptDestroyKey",
+	"BCryptEncrypt",
+	"BCryptDecrypt",
+	"BCryptGenerateSymmetricKey",
+	"BCryptHashData",
 };
 
 // 持久化类API
 const std::vector<std::string_view> PERSISTENCE_APIS = {
-	"RegSetValueA", "RegSetValueW", "RegSetValueExA", "RegSetValueExW",
-	"RegCreateKeyA", "RegCreateKeyW", "RegCreateKeyExA", "RegCreateKeyExW",
-	"RegOpenKeyA", "RegOpenKeyW", "RegOpenKeyExA", "RegOpenKeyExW",
-	"RegDeleteKeyA", "RegDeleteKeyW", "CreateServiceA", "CreateServiceW",
-	"OpenSCManagerA", "OpenSCManagerW", "StartServiceA", "StartServiceW",
-	"DeleteService", "CopyFileA", "CopyFileW", "MoveFileA", "MoveFileW",
-	"SetFileAttributesA", "SetFileAttributesW", "RegisterServiceProcess",
+	"RegSetValueA",
+	"RegSetValueW",
+	"RegSetValueExA",
+	"RegSetValueExW",
+	"RegCreateKeyA",
+	"RegCreateKeyW",
+	"RegCreateKeyExA",
+	"RegCreateKeyExW",
+	"RegOpenKeyA",
+	"RegOpenKeyW",
+	"RegOpenKeyExA",
+	"RegOpenKeyExW",
+	"RegDeleteKeyA",
+	"RegDeleteKeyW",
+	"CreateServiceA",
+	"CreateServiceW",
+	"OpenSCManagerA",
+	"OpenSCManagerW",
+	"StartServiceA",
+	"StartServiceW",
+	"DeleteService",
+	"CopyFileA",
+	"CopyFileW",
+	"MoveFileA",
+	"MoveFileW",
+	"SetFileAttributesA",
+	"SetFileAttributesW",
+	"RegisterServiceProcess",
 };
 
 // 高危总表中除上述分类外的动态解析/反调试/令牌类API
 const std::vector<std::string_view> EXTRA_SUSPICIOUS_APIS = {
-	"LoadLibraryA", "LoadLibraryW", "GetProcAddress", "LdrLoadDll",
-	"LdrGetProcedureAddress", "IsDebuggerPresent", "CheckRemoteDebuggerPresent",
-	"NtQueryInformationProcess", "NtQuerySystemInformation", "OutputDebugStringA",
-	"OutputDebugStringW", "AdjustTokenPrivileges", "OpenProcessToken",
-	"LookupPrivilegeValueA", "LookupPrivilegeValueW", "SetTokenInformation",
-	"DuplicateTokenEx", "NtSetInformationProcess",
+	"LoadLibraryA",
+	"LoadLibraryW",
+	"GetProcAddress",
+	"LdrLoadDll",
+	"LdrGetProcedureAddress",
+	"IsDebuggerPresent",
+	"CheckRemoteDebuggerPresent",
+	"NtQueryInformationProcess",
+	"NtQuerySystemInformation",
+	"OutputDebugStringA",
+	"OutputDebugStringW",
+	"AdjustTokenPrivileges",
+	"OpenProcessToken",
+	"LookupPrivilegeValueA",
+	"LookupPrivilegeValueW",
+	"SetTokenInformation",
+	"DuplicateTokenEx",
+	"NtSetInformationProcess",
 };
 
 // 动态解析信号API(has_dynamic_import)
 const std::vector<std::string_view> DYNAMIC_APIS = {
-	"LoadLibraryA", "LoadLibraryW", "GetProcAddress",
+	"LoadLibraryA",
+	"LoadLibraryW",
+	"GetProcAddress",
 };
 
 // 高危DLL表(比较时忽略大小写与.dll后缀)
 const std::vector<std::string_view> SUSPICIOUS_DLLS = {
-	"ws2_32.dll", "wininet.dll", "urlmon.dll", "winhttp.dll", "dnsapi.dll",
-	"wsock32.dll", "iphlpapi.dll", "netapi32.dll", "mpr.dll", "crypt32.dll",
-	"bcrypt.dll", "wintrust.dll", "advapi32.dll", "ntdll.dll", "secur32.dll",
-	"wtsapi32.dll", "userenv.dll", "sspicli.dll", "rpcrt4.dll", "ole32.dll",
-	"oleaut32.dll", "shell32.dll", "winspool.drv", "wlanapi.dll",
+	"ws2_32.dll",
+	"wininet.dll",
+	"urlmon.dll",
+	"winhttp.dll",
+	"dnsapi.dll",
+	"wsock32.dll",
+	"iphlpapi.dll",
+	"netapi32.dll",
+	"mpr.dll",
+	"crypt32.dll",
+	"bcrypt.dll",
+	"wintrust.dll",
+	"advapi32.dll",
+	"ntdll.dll",
+	"secur32.dll",
+	"wtsapi32.dll",
+	"userenv.dll",
+	"sspicli.dll",
+	"rpcrt4.dll",
+	"ole32.dll",
+	"oleaut32.dll",
+	"shell32.dll",
+	"winspool.drv",
+	"wlanapi.dll",
 };
 
 // 字符串扫描关键词表
 const std::vector<std::string_view> STRING_KEYWORDS = {
-	"CreateRemoteThread", "WriteProcessMemory", "VirtualAllocEx", "WinExec",
-	"LoadLibrary", "GetProcAddress", "IsDebuggerPresent", "RegSetValue",
-	"CreateService", "ShellExecute", "URLDownloadToFile", "InternetOpen",
-	"CryptEncrypt", "AdjustTokenPrivileges", "NtUnmapViewOfSection", "SetWindowsHookEx",
+	"CreateRemoteThread",
+	"WriteProcessMemory",
+	"VirtualAllocEx",
+	"WinExec",
+	"LoadLibrary",
+	"GetProcAddress",
+	"IsDebuggerPresent",
+	"RegSetValue",
+	"CreateService",
+	"ShellExecute",
+	"URLDownloadToFile",
+	"InternetOpen",
+	"CryptEncrypt",
+	"AdjustTokenPrivileges",
+	"NtUnmapViewOfSection",
+	"SetWindowsHookEx",
 };
 
 // ---- 字符串工具 ----
@@ -568,7 +706,8 @@ int import_callback(void *ctx, const peparse::VA &, const std::string &module, c
  */
 class ParsedPEGuard {
 public:
-	explicit ParsedPEGuard(peparse::parsed_pe *pe) : pe_(pe) {}
+	explicit ParsedPEGuard(peparse::parsed_pe *pe) : pe_(pe) {
+	}
 	~ParsedPEGuard() {
 		if (pe_ != nullptr) {
 			peparse::DestructParsedPE(pe_);
@@ -879,7 +1018,8 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 	}
 	feats.file_size = file_size;
 	feats.file_entropy = (pe->fileBuffer != nullptr && pe->fileBuffer->buf != nullptr && file_size > 0)
-		? shannon_entropy(pe->fileBuffer->buf, (size_t)file_size) : 0.0;
+		? shannon_entropy(pe->fileBuffer->buf, (size_t)file_size)
+		: 0.0;
 	feats.overlay_size = file_size > raw_end_max ? (GREAT_SIZE_T)(file_size - raw_end_max) : 0;
 	feats.overlay_ratio = file_size > 0 ? (double)feats.overlay_size / (double)file_size : 0.0;
 	feats.headers_image_ratio = (opt.valid && opt.size_of_image > 0) ? (double)opt.size_of_headers / (double)opt.size_of_image : 0.0;

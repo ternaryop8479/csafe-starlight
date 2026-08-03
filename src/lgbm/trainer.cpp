@@ -6,14 +6,14 @@
  * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  */
 
-#include "lgbm/trainer.h"
-#include "lgbm/detail/lgbm_handle.h"
 #include <algorithm>
-#include <cmath>
 #include <limits>
 #include <random>
 #include <string>
 #include <vector>
+
+#include "lgbm/detail/lgbm_handle.h"
+#include "lgbm/trainer.h"
 
 namespace starlight_v3::lgbm {
 

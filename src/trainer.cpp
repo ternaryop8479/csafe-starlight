@@ -6,18 +6,20 @@
  * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  */
 
-#include "trainer.h"
-#include "external/BS_thread_pool.hpp"
-#include "lgbm/feat_extractor/efg.h"
-#include "lgbm/feat_extractor/pe.h"
-#include "lgbm/feat_extractor/tspm.h"
-#include "lgbm/feat_vector.h"
-#include "tspm/reasoner.h"
 #include <algorithm>
 #include <atomic>
 #include <numeric>
 #include <random>
 #include <thread>
+
+#include "external/BS_thread_pool.hpp"
+
+#include "lgbm/feat_extractor/efg.h"
+#include "lgbm/feat_extractor/pe.h"
+#include "lgbm/feat_extractor/tspm.h"
+#include "lgbm/feat_vector.h"
+#include "trainer.h"
+#include "tspm/reasoner.h"
 
 namespace {
 
@@ -26,7 +28,10 @@ namespace {
 size_t drop_edgeless(std::vector<starlight_v3::EFG> &dataset) {
 	size_t before = dataset.size();
 	dataset.erase(std::remove_if(dataset.begin(), dataset.end(),
-		[](const starlight_v3::EFG &efg) { return efg.edges_.empty(); }), dataset.end());
+					  [](const starlight_v3::EFG &efg) {
+						  return efg.edges_.empty();
+					  }),
+		dataset.end());
 	return before - dataset.size();
 }
 
@@ -90,7 +95,8 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 	}
 
 	// 日志回调缺省为空回调, 避免匿名命名空间函数中判空
-	std::function<void(const std::string &)> log_callback = config.log_callback ? config.log_callback : [](const std::string &) {};
+	std::function<void(const std::string &)> log_callback = config.log_callback ? config.log_callback : [](const std::string &) {
+	};
 
 	// 1. 黑白数据集各自独立划分k折
 	std::mt19937 rng(config.random_seed);

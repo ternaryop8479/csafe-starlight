@@ -1,4 +1,4 @@
-/**
+/*
  * @file efg_generator.cpp
  * @brief 程序的EFG提取器实现
  * @author ternaryop8479
@@ -12,7 +12,6 @@
 #include <map>
 #include <memory>
 #include <queue>
-#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>

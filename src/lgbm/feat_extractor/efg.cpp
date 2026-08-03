@@ -6,11 +6,12 @@
  * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  */
 
-#include "lgbm/feat_extractor/efg.h"
-#include "basic/types.h"
 #include <cmath>
 #include <unordered_map>
 #include <vector>
+
+#include "basic/types.h"
+#include "lgbm/feat_extractor/efg.h"
 
 // 内部工具函数
 namespace {

@@ -9,9 +9,10 @@
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_MODEL_H
 #define CSAFE_STARLIGHT_V3_INCLUDE_MODEL_H
 
+#include <string>
+
 #include "lgbm/model.h"
 #include "tspm/model.h"
-#include <string>
 
 namespace starlight_v3 {
 

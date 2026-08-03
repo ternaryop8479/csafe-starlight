@@ -9,10 +9,11 @@
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_LGBM_DETAIL_LGBM_HANDLE_H
 #define CSAFE_STARLIGHT_V3_INCLUDE_LGBM_DETAIL_LGBM_HANDLE_H
 
-#include <LightGBM/c_api.h>
 #include <stdexcept>
 #include <string>
 #include <utility>
+
+#include <LightGBM/c_api.h>
 
 namespace starlight_v3::lgbm::detail {
 
@@ -35,7 +36,8 @@ struct BoosterHandleGuard {
 	BoosterHandle handle = nullptr; ///< 被管理的Booster句柄
 
 	BoosterHandleGuard() = default;
-	explicit BoosterHandleGuard(BoosterHandle h) : handle(h) {}
+	explicit BoosterHandleGuard(BoosterHandle h) : handle(h) {
+	}
 	~BoosterHandleGuard() {
 		if (handle) {
 			LGBM_BoosterFree(handle);
@@ -66,7 +68,8 @@ struct DatasetHandleGuard {
 	DatasetHandle handle = nullptr; ///< 被管理的Dataset句柄
 
 	DatasetHandleGuard() = default;
-	explicit DatasetHandleGuard(DatasetHandle h) : handle(h) {}
+	explicit DatasetHandleGuard(DatasetHandle h) : handle(h) {
+	}
 	~DatasetHandleGuard() {
 		if (handle) {
 			LGBM_DatasetFree(handle);

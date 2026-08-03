@@ -48,14 +48,15 @@ void extract_evidence_dot(const AnalysisResult &result, const std::string &filen
 	ofs << std::endl;
 
 	// 用于记录已经处理过的节点指针，避免在 DAG 中重复定义节点
-	std::unordered_set<const tspm::EvidenceTree*> visited_nodes;
+	std::unordered_set<const tspm::EvidenceTree *> visited_nodes;
 
 	// 递归辅助函数：处理节点及其子树
-	std::function<void(const std::shared_ptr<tspm::EvidenceTree>&)> process_node =
-		[&](const std::shared_ptr<tspm::EvidenceTree>& node) {
-			if (!node) return;
+	std::function<void(const std::shared_ptr<tspm::EvidenceTree> &)> process_node =
+		[&](const std::shared_ptr<tspm::EvidenceTree> &node) {
+			if (!node)
+				return;
 
-			const tspm::EvidenceTree* raw_ptr = node.get();
+			const tspm::EvidenceTree *raw_ptr = node.get();
 
 			// 如果节点已经被处理过，则直接返回（避免重复定义和无限递归）
 			if (visited_nodes.count(raw_ptr)) {
@@ -85,8 +86,9 @@ void extract_evidence_dot(const AnalysisResult &result, const std::string &filen
 			ofs << "Weight: " << std::fixed << std::setprecision(3) << node->weight << "\"];" << std::endl;
 
 			// --- 2. 递归处理子节点并绘制边 ---
-			for (const auto& child : node->sub_nodes) {
-				if (!child) continue;
+			for (const auto &child : node->sub_nodes) {
+				if (!child)
+					continue;
 
 				std::string child_id = "node_" + std::to_string(reinterpret_cast<uintptr_t>(child.get()));
 
@@ -109,7 +111,7 @@ void extract_evidence_dot(const AnalysisResult &result, const std::string &filen
 		};
 
 	// 3. 遍历所有的根节点
-	for (const auto& root_tree : result.tspm_result.evidence_trees) {
+	for (const auto &root_tree : result.tspm_result.evidence_trees) {
 		process_node(root_tree);
 	}
 

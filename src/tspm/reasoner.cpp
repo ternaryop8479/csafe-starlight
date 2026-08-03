@@ -5,9 +5,10 @@
  * @date 2026-07-31
  */
 
-#include "tspm/reasoner.h"
-#include "basic/types.h"
 #include <memory>
+
+#include "basic/types.h"
+#include "tspm/reasoner.h"
 
 // 内部工具函数
 namespace {

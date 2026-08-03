@@ -8,10 +8,11 @@
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_TSPM_REASONER_H
 #define CSAFE_STARLIGHT_V3_INCLUDE_TSPM_REASONER_H
 
+#include <memory>
+
 #include "basic/efg.h"
 #include "basic/types.h"
 #include "tspm/model.h"
-#include <memory>
 
 namespace starlight_v3::tspm {
 
@@ -72,7 +73,7 @@ private:
 		 * @brief 权重+=运算符重载
 		 * @return 返回经过加法后的当前对象
 		 */
-		DFSData& operator+=(const DFSData &wp) noexcept {
+		DFSData &operator+=(const DFSData &wp) noexcept {
 			black_weight += wp.black_weight;
 			white_weight += wp.white_weight;
 			return *this;

@@ -9,12 +9,13 @@
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_REASONER_H
 #define CSAFE_STARLIGHT_V3_INCLUDE_REASONER_H
 
+#include <string>
+
 #include "basic/efg.h"
 #include "basic/feat_pack.h"
 #include "lgbm/reasoner.h"
 #include "model.h"
 #include "tspm/reasoner.h"
-#include <string>
 
 namespace starlight_v3 {
 

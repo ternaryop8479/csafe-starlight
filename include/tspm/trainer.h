@@ -8,13 +8,14 @@
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_TSPM_TRAINER_H
 #define CSAFE_STARLIGHT_V3_INCLUDE_TSPM_TRAINER_H
 
+#include <functional>
+#include <mutex>
+#include <unordered_set>
+
 #include "basic/api_table.h"
 #include "basic/efg.h"
 #include "basic/types.h"
 #include "tspm/model.h"
-#include <functional>
-#include <mutex>
-#include <unordered_set>
 
 namespace starlight_v3::tspm {
 

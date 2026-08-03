@@ -9,14 +9,15 @@
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_TRAINER_H
 #define CSAFE_STARLIGHT_V3_INCLUDE_TRAINER_H
 
+#include <functional>
+#include <string>
+#include <vector>
+
 #include "basic/efg.h"
 #include "basic/types.h"
 #include "lgbm/trainer.h"
 #include "model.h"
 #include "tspm/trainer.h"
-#include <functional>
-#include <string>
-#include <vector>
 
 namespace starlight_v3 {
 

@@ -19,13 +19,11 @@
 #include <iostream>
 #include <mutex>
 #include <optional>
-#include <stdexcept>
 #include <string>
 #include <thread>
 #include <unordered_set>
 #include <vector>
 
-#include "basic/types.h"
 #include "efg_generator.h"
 #include "model.h"
 #include "reasoner.h"

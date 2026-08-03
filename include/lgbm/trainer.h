@@ -9,9 +9,10 @@
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_LGBM_TRAINER_H
 #define CSAFE_STARLIGHT_V3_INCLUDE_LGBM_TRAINER_H
 
+#include <cstdint>
+
 #include "basic/types.h"
 #include "lgbm/model.h"
-#include <cstdint>
 
 namespace starlight_v3::lgbm {
 

@@ -6,22 +6,23 @@
  */
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <mutex>
 #include <queue>
 #include <string>
-#include <atomic>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
-#include "basic/api_table.h"
-#include "basic/types.h"
 #include "external/BS_thread_pool.hpp"
 #include "external/xxhash/xxhash.h"
+
+#include "basic/api_table.h"
+#include "basic/types.h"
 #include "tspm/trainer.h"
 
 namespace starlight_v3::tspm {
@@ -80,9 +81,9 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 			if (visited.size() <= api_id) { // 检查当前visited大小
 				visited.resize(api_id + 1, false);
 			}
-			if(!visited[api_id]) { // 如果未记录过当前API则进行记录
+			if (!visited[api_id]) { // 如果未记录过当前API则进行记录
 				visited[api_id] = true; // 访问标记
-				if(malware_api_weight.size() <= api_id) { // 扩容malware_api_weight
+				if (malware_api_weight.size() <= api_id) { // 扩容malware_api_weight
 					malware_api_weight.resize(api_id + 1, 0);
 				}
 				++malware_api_weight[api_id];
@@ -117,9 +118,9 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 			if (visited.size() <= api_id) { // 检查当前visited大小
 				visited.resize(api_id + 1, false);
 			}
-			if(!visited[api_id]) { // 如果未记录过当前API则进行记录
+			if (!visited[api_id]) { // 如果未记录过当前API则进行记录
 				visited[api_id] = true; // 访问标记
-				if(benign_api_weight.size() <= api_id) { // 扩容benign_api_weight
+				if (benign_api_weight.size() <= api_id) { // 扩容benign_api_weight
 					benign_api_weight.resize(api_id + 1, 0);
 				}
 				++benign_api_weight[api_id];
@@ -136,7 +137,7 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 	}
 
 	// 忽略掉不存在于解析列表中的API
-	if(banned_apis_.count(INVALID_NUM)) {
+	if (banned_apis_.count(INVALID_NUM)) {
 		banned_apis_.erase(INVALID_NUM);
 	}
 

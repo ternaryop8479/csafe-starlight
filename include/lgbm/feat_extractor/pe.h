@@ -9,8 +9,9 @@
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_LGBM_FEAT_EXTRACTOR_PE_H
 #define CSAFE_STARLIGHT_V3_INCLUDE_LGBM_FEAT_EXTRACTOR_PE_H
 
-#include "basic/feat_pack.h"
 #include <string>
+
+#include "basic/feat_pack.h"
 
 namespace starlight_v3::lgbm {
 

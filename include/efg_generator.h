@@ -9,9 +9,10 @@
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_EFG_GENERATOR_H
 #define CSAFE_STARLIGHT_V3_INCLUDE_EFG_GENERATOR_H
 
+#include <string>
+
 #include "basic/efg.h"
 #include "basic/types.h"
-#include <string>
 
 namespace starlight_v3 {
 
