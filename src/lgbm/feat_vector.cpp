@@ -3,6 +3,7 @@
  * @brief 特征向量序列化实现
  * @author ternaryop8479
  * @date 2026-08-03
+ * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  */
 
 #include "lgbm/feat_vector.h"

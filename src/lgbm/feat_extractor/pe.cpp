@@ -3,6 +3,7 @@
  * @brief PE静态特征提取器实现
  * @author ternaryop8479
  * @date 2026-08-02
+ * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  */
 
 #include "lgbm/feat_extractor/pe.h"

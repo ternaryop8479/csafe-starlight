@@ -3,6 +3,7 @@
  * @brief 最终推理器实现(整合推理)
  * @author ternaryop8479
  * @date 2026-08-03
+ * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  */
 
 #include "reasoner.h"

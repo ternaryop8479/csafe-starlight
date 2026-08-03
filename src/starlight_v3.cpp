@@ -3,6 +3,7 @@
  * @brief CSafe Starlight V3 官方训练/跑分/推理命令行工具
  * @author ternaryop8479
  * @date 2026-08-03
+ * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  *
  * 子命令:
  *   train <malware_dir> <benign_dir> <model_path> [max_train_samples]  训练模型
