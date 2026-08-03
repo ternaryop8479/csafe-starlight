@@ -9,5 +9,7 @@
 - LightGBM模型大小：223302字节
 - 训练时间：2026-08-04 01:52
 - 病毒库日期：2026-03
+- 自测查杀率：~92%
+- 自测误报率：~0.31%(系统文件)/0.64%(应用程序)
 - 模型性质：预览测试模型
 - 模型下载直链：https://cloud-drive.ternaryop.top/raw/public/csafe-starlight/v3/models/csafe_starlight_v3.26.8.4-preview.starlv3.bin
