@@ -79,7 +79,7 @@ public:
 private:
 	tspm::Model tspm_model_; ///< tosSPM模型(Trie树)
 	lgbm::Model lgbm_model_; ///< LightGBM模型
-	SIZE_T version_; ///< 用于标记当前模型训练日期
+	SIZE_T version_ = 0; ///< 用于标记当前模型训练日期
 };
 
 } // namespace starlight_v3
