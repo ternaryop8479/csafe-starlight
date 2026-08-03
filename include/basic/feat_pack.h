@@ -53,10 +53,12 @@ struct TSPMFeatPack { // 累死我了呜呜呜呜
 	double max_benweight_density; ///< 良性链条长度与链条权重之比的最大值
 
 	// 引擎输出权重特征
-	double tspm_mal_weight; ///< 引擎输出的程序恶意权重
-	double tspm_ben_weight; ///< 引擎输出的程序良性权重
-	double weight_diff; ///< 引擎输出的恶意权重与良性权重之差
-	double weight_ratio; ///< 引擎输出的恶意权重与良性权重之比
+	// 注意: tspm_mal_weight/tspm_ben_weight/weight_diff 均经过归一化(除以对应匹配链数),
+	// 反映"平均每条链的权重", 原始累加权重见AnalysisResult.malware_score/benign_score.
+	double tspm_mal_weight; ///< 引擎输出的程序恶意权重(已归一化: 原始恶意权重/恶意匹配链数)
+	double tspm_ben_weight; ///< 引擎输出的程序良性权重(已归一化: 原始良性权重/良性匹配链数)
+	double weight_diff; ///< 归一化后的恶意权重与良性权重之差
+	double weight_ratio; ///< 引擎输出的恶意权重与良性权重之比(原始比值, 未归一化)
 
 	// 引擎执行过程中的统计特征
 	double avg_malskip_count; ///< 匹配单条恶意链条时的平均跳过次数

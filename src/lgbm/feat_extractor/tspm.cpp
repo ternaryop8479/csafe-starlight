@@ -272,9 +272,14 @@ TSPMFeatPack extract_tspm_feats(const tspm::AnalysisResult &result, const EFG &e
 	feats.is_mal_dominant = mal_has_chain && (!ben_has_chain || accumulator.mal_.max_length >= accumulator.ben_.max_length);
 
 	// 引擎输出特征
-	feats.tspm_mal_weight = result.malware_score;
-	feats.tspm_ben_weight = result.benign_score;
-	feats.weight_diff = result.malware_score - result.benign_score;
+	// 注意: malware_score/benign_score是DFS沿EFG边匹配的权重累加和, 与匹配到的链数正相关,
+	// 直接使用会让LightGBM特征尺度随图规模/链数爆炸(百万级vs个位数), 导致无法分裂.
+	// 因此分别除以对应的匹配链数, 使特征反映"平均每条链的权重"(数值落在权重区间[-1,1]附近).
+	double mal_scale = accumulator.mal_.chain_count > 0 ? (double)accumulator.mal_.chain_count : 1.0;
+	double ben_scale = accumulator.ben_.chain_count > 0 ? (double)accumulator.ben_.chain_count : 1.0;
+	feats.tspm_mal_weight = result.malware_score / mal_scale;
+	feats.tspm_ben_weight = result.benign_score / ben_scale;
+	feats.weight_diff = (result.malware_score / mal_scale) - (result.benign_score / ben_scale);
 	feats.weight_ratio = !near_zero(result.benign_score) ? std::fabs(result.malware_score / result.benign_score) : 0.0;
 	feats.tspm_score = result.final_score;
 
