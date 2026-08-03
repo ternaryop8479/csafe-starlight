@@ -28,13 +28,13 @@ void extract_evidence_dot(const AnalysisResult &result, const std::string &filen
 		return;
 	}
 
-	// 1. DOT 文件头
+	// DOT 文件头
 	ofs << "digraph EvidenceTree {" << std::endl;
 	ofs << "  rankdir=TB;" << std::endl; // TB: Top to Bottom, LR: Left to Right
 	ofs << "  node [shape=box, style=\"rounded,filled\", fontname=\"Arial\", fontsize=10];" << std::endl;
 	ofs << "  edge [fontname=\"Arial\", fontsize=9];" << std::endl;
 
-	// 2. 添加总分展示 (作为一个不可见的标题节点或 Label)
+	// 添加总分展示 (作为一个不可见的标题节点或 Label)
 	// 这里使用 Label 属性显示在图表最上方
 	ofs << "  labelloc=\"t\";" << std::endl;
 	ofs << "  label=\"<<TABLE BORDER=\"0\" CELLBORDER=\"0\" CELLSPACING=\"0\">" << std::endl;
@@ -67,7 +67,7 @@ void extract_evidence_dot(const AnalysisResult &result, const std::string &filen
 			// 生成唯一的节点 ID (使用指针地址)
 			std::string node_id = "node_" + std::to_string(reinterpret_cast<uintptr_t>(raw_ptr));
 
-			// --- 1. 定义节点样式 (颜色高亮) ---
+			// 定义节点样式 (颜色高亮)
 			ofs << "  " << node_id << " [";
 
 			if (node->weight > 1e-6) {
@@ -85,7 +85,7 @@ void extract_evidence_dot(const AnalysisResult &result, const std::string &filen
 			ofs << ", label=\"" << node->api_name << "\\n";
 			ofs << "Weight: " << std::fixed << std::setprecision(3) << node->weight << "\"];" << std::endl;
 
-			// --- 2. 递归处理子节点并绘制边 ---
+			// 递归处理子节点并绘制边
 			for (const auto &child : node->sub_nodes) {
 				if (!child)
 					continue;
@@ -110,7 +110,7 @@ void extract_evidence_dot(const AnalysisResult &result, const std::string &filen
 			}
 		};
 
-	// 3. 遍历所有的根节点
+	// 遍历所有的根节点
 	for (const auto &root_tree : result.tspm_result.evidence_trees) {
 		process_node(root_tree);
 	}
@@ -132,14 +132,14 @@ Reasoner::~Reasoner() = default;
 AnalysisResult Reasoner::analyze_efg(const EFG &efg) {
 	AnalysisResult result = {}; // 值初始化, 未提取的PE特征保持全零
 
-	// 1. tosSPM推理(记录证据树, 供特征提取与DOT导出使用)
+	// tosSPM推理(记录证据树, 供特征提取与DOT导出使用)
 	result.tspm_result = tspm_reasoner_.analyze_efg(efg, true);
 
-	// 2. 提取特征: EFG特征 + TSPM特征, PE特征保持全零
+	// 提取特征: EFG特征 + TSPM特征, PE特征保持全零
 	result.feats.efg_feats = lgbm::extract_efg_feats(efg);
 	result.feats.tspm_feats = lgbm::extract_tspm_feats(result.tspm_result, efg);
 
-	// 3. LightGBM打分
+	// LightGBM打分
 	double features[lgbm::kTotalFeatDims];
 	lgbm::serialize_feat_pack(result.feats, features);
 	result.final_score = lgbm_reasoner_.predict(features, static_cast<int32_t>(lgbm::kTotalFeatDims));
@@ -150,15 +150,15 @@ AnalysisResult Reasoner::analyze_efg(const EFG &efg) {
 AnalysisResult Reasoner::analyze_efg(const EFG &efg, const std::string &file_path) {
 	AnalysisResult result = {}; // 值初始化, 三个特征组全部清零
 
-	// 1. tosSPM推理(记录证据树, 供特征提取与DOT导出使用)
+	// tosSPM推理(记录证据树, 供特征提取与DOT导出使用)
 	result.tspm_result = tspm_reasoner_.analyze_efg(efg, true);
 
-	// 2. 提取特征: EFG特征 + TSPM特征 + PE特征
+	// 提取特征: EFG特征 + TSPM特征 + PE特征
 	result.feats.efg_feats = lgbm::extract_efg_feats(efg);
 	result.feats.tspm_feats = lgbm::extract_tspm_feats(result.tspm_result, efg);
 	result.feats.pe_feats = lgbm::extract_pe_feats(file_path);
 
-	// 3. LightGBM打分
+	// LightGBM打分
 	double features[lgbm::kTotalFeatDims];
 	lgbm::serialize_feat_pack(result.feats, features);
 	result.final_score = lgbm_reasoner_.predict(features, static_cast<int32_t>(lgbm::kTotalFeatDims));

@@ -35,16 +35,11 @@ size_t drop_edgeless(std::vector<starlight_v3::EFG> &dataset) {
 	return before - dataset.size();
 }
 
-/**
- * @brief 拷贝数据集后剔除无边EFG再执行tosSPM训练
- * @details 以值传递拷贝数据集, 因为train()训练完成后会清空数据集的api_table,
- * 拷贝可以保证调用方的原数据集不受影响. 无边EFG在每次训练前都被剔除, 防止干扰训练.
- * @param trainer tosSPM训练器
- * @param log_callback 日志回调, 用于输出剔除统计
- * @param malware 恶意样本的EFG拷贝
- * @param benign 良性样本的EFG拷贝
- * @return 训练完成的tosSPM模型
- */
+// 以值传递拷贝数据集后剔除无边EFG再执行tosSPM训练:
+// 之所以按值传递, 是因为train()训练完成后会清空数据集的api_table,
+//    拷贝可以保证调用方的原数据集不受影响;
+// 无边EFG(edges_为空, 典型如.NET程序)在每次训练前都被剔除, 防止干扰训练;
+// 剔除后数据集若为空则抛异常终止.
 starlight_v3::tspm::Model train_tspm_filtered(starlight_v3::tspm::Trainer &trainer, const std::function<void(const std::string &)> &log_callback, std::vector<starlight_v3::EFG> malware, std::vector<starlight_v3::EFG> benign) {
 	// 剔除无边EFG
 	size_t dropped_mal = drop_edgeless(malware);
@@ -61,13 +56,9 @@ starlight_v3::tspm::Model train_tspm_filtered(starlight_v3::tspm::Trainer &train
 	return trainer.train(malware, benign);
 }
 
-/**
- * @brief 将[0, total)的下标洗牌后均分为k折
- * @param total 样本总数
- * @param k 折数
- * @param rng 随机数生成器
- * @return k个下标集合, 余数分配到前几折
- */
+// 将[0, total)的下标洗牌后均分为k折:
+// 生成0..total-1的下标序列并整体洗牌;
+// 按下标对k取模轮流分配到各折, 余数会自然分到前几折.
 std::vector<std::vector<size_t>> split_folds(size_t total, starlight_v3::SIZE_T k, std::mt19937 &rng) {
 	std::vector<size_t> indices(total);
 	std::iota(indices.begin(), indices.end(), 0);
@@ -98,12 +89,12 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 	std::function<void(const std::string &)> log_callback = config.log_callback ? config.log_callback : [](const std::string &) {
 	};
 
-	// 1. 黑白数据集各自独立划分k折
+	// 黑白数据集各自独立划分k折
 	std::mt19937 rng(config.random_seed);
 	std::vector<std::vector<size_t>> mal_folds = split_folds(malware_samples.size(), config.cross_validation_k, rng);
 	std::vector<std::vector<size_t>> ben_folds = split_folds(benign_samples.size(), config.cross_validation_k, rng);
 
-	// 2. 分配特征矩阵与标签(行序: 先恶意样本再良性样本, 标签恶意=1良性=0)
+	// 分配特征矩阵与标签(行序: 先恶意样本再良性样本, 标签恶意=1良性=0)
 	const size_t mal_count = malware_samples.size();
 	const size_t total_samples = mal_count + benign_samples.size();
 	std::vector<double> feature_matrix(total_samples * lgbm::kTotalFeatDims);
@@ -115,11 +106,11 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 		labels[mal_count + i] = 0.0f;
 	}
 
-	// 3. 交叉训练: 每折用其余折训练tosSPM模型并对当前折推理生成特征
+	// 交叉训练: 每折用其余折训练tosSPM模型并对当前折推理生成特征
 	BS::thread_pool thread_pool(config.thread_count ? config.thread_count : std::thread::hardware_concurrency());
 	std::atomic<size_t> feature_fail_count { 0 }; // 特征生成失败的样本数(线程池任务异常被吞时上报, 防止静默丢失)
 	for (SIZE_T fold = 0; fold < config.cross_validation_k; ++fold) {
-		// 3a. 合并训练折的EFG(深拷贝, train()会清空api_table, 不能影响原样本)
+		// 合并训练折的EFG(深拷贝, train()会清空api_table, 不能影响原样本)
 		std::vector<EFG> train_mal, train_ben;
 		for (SIZE_T other_fold = 0; other_fold < config.cross_validation_k; ++other_fold) {
 			if (other_fold == fold) {
@@ -133,12 +124,12 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 			}
 		}
 
-		// 3b. 训练本折的tosSPM模型(拷贝+剔除无边EFG)
+		// 训练本折的tosSPM模型(拷贝+剔除无边EFG)
 		log_callback("[Trainer::train()] Cross-validation fold " + std::to_string(fold + 1) + "/" + std::to_string(config.cross_validation_k) + "\n");
 		tspm::Trainer tspm_trainer(config.tspm_config, log_callback);
 		tspm::Model tspm_model = train_tspm_filtered(tspm_trainer, log_callback, std::move(train_mal), std::move(train_ben));
 
-		// 3c. 用本折模型对测试折样本并行推理, 生成特征向量写入特征矩阵
+		// 用本折模型对测试折样本并行推理, 生成特征向量写入特征矩阵
 		// 注意: 测试折不剔除无边EFG, 对无边EFG正常推理, 供LightGBM学习无边样本的形态
 		log_callback("[Trainer::train()] Inferring fold " + std::to_string(fold + 1) + " features (" + std::to_string(mal_folds[static_cast<size_t>(fold)].size()) + " malware, " + std::to_string(ben_folds[static_cast<size_t>(fold)].size()) + " benign)\n");
 		for (size_t idx : mal_folds[static_cast<size_t>(fold)]) {
@@ -191,7 +182,7 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 		// 本折的tspm_model与reasoner在作用域结束时析构, 释放Trie树与证据树内存
 	}
 
-	// 4. 使用全部特征向量训练LightGBM模型
+	// 使用全部特征向量训练LightGBM模型
 	if (feature_fail_count.load() > 0) {
 		log_callback("[Trainer::train()] WARNING: " + std::to_string(feature_fail_count.load()) + " samples failed feature generation, their features stay zero\n");
 	}
@@ -199,7 +190,7 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 	lgbm::Trainer lgbm_trainer;
 	lgbm::Model lgbm_model = lgbm_trainer.train(feature_matrix.data(), static_cast<int32_t>(total_samples), static_cast<int32_t>(lgbm::kTotalFeatDims), labels.data(), config.lgbm_config);
 
-	// 5. 使用全量数据训练最终tosSPM模型(同样剔除无边EFG)
+	// 使用全量数据训练最终tosSPM模型(同样剔除无边EFG)
 	log_callback("[Trainer::train()] Starting full-data final tosSPM training\n");
 	std::vector<EFG> all_mal, all_ben;
 	all_mal.reserve(mal_count);
@@ -213,7 +204,7 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 	tspm::Trainer final_tspm_trainer(config.tspm_config, log_callback);
 	tspm::Model final_tspm_model = train_tspm_filtered(final_tspm_trainer, log_callback, std::move(all_mal), std::move(all_ben));
 
-	// 6. 打包返回
+	// 打包返回
 	log_callback("[Trainer::train()] Training complete\n");
 	return Model(final_tspm_model, lgbm_model);
 }

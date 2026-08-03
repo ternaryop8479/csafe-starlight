@@ -16,9 +16,7 @@
 // 内部工具函数
 namespace {
 
-/**
- * @brief 单维数值序列的统计结果
- */
+// 单维数值序列的统计结果
 struct FeatStats {
 	double mean = 0.0; ///< 均值
 	double var = 0.0; ///< 总体方差
@@ -26,14 +24,9 @@ struct FeatStats {
 	double max = 0.0; ///< 最大值
 };
 
-/**
- * @brief 计算数值序列的均值/总体方差/偏度/最大值
- *
- * 偏度使用g1 = m3 / sigma^3, 序列长度不足3或标准差趋近于0时置0.0.
- * @param data 数值序列
- * @param n 序列长度
- * @return 统计结果, 序列为空时全部为0.0
- */
+// 计算数值序列的均值/总体方差/偏度/最大值:
+// 序列为空时直接返回全0的统计结果;
+// 偏度使用g1 = m3 / sigma^3, 序列长度不足3或标准差趋近于0时置0.0.
 FeatStats calc_feat_stats(const double *data, starlight_v3::SIZE_T n) {
 	FeatStats stats;
 	if (n == 0) {
@@ -69,12 +62,8 @@ FeatStats calc_feat_stats(const double *data, starlight_v3::SIZE_T n) {
 	return stats;
 }
 
-/**
- * @brief 计算数值序列分布的Shannon熵
- * @param data 数值序列
- * @param n 序列长度
- * @return 熵值, 序列为空时为0.0
- */
+// 计算数值序列分布的Shannon熵: 统计各值出现频率得到概率分布,
+// 熵 = -sum(p * log p), 序列为空时返回0.0.
 double calc_entropy(const double *data, starlight_v3::SIZE_T n) {
 	if (n == 0) {
 		return 0.0;
@@ -91,14 +80,9 @@ double calc_entropy(const double *data, starlight_v3::SIZE_T n) {
 	return entropy;
 }
 
-/**
- * @brief 通过迭代BFS统计包含指定节点的连通分量大小
- * @param efg 目标EFG
- * @param start 起始节点下标
- * @param visited 访问标记表(传入时为全0)
- * @param mark 本次BFS使用的访问标记值
- * @return 连通分量中的节点数
- */
+// 通过迭代BFS统计包含指定节点的连通分量大小:
+// 使用栈模拟DFS/BFS遍历, 以mark值标记访问(避免每次重置整个visited数组),
+// 沿出边方向展开, 返回从start可达的节点总数.
 starlight_v3::SIZE_T bfs_component_size(const starlight_v3::EFG &efg, starlight_v3::SIZE_T start, std::vector<starlight_v3::SIZE_T> &visited, starlight_v3::SIZE_T mark) {
 	starlight_v3::SIZE_T count = 0;
 	std::vector<starlight_v3::SIZE_T> stack;
@@ -145,7 +129,7 @@ EFGFeatPack extract_efg_feats(const EFG &efg) {
 		return feats;
 	}
 
-	// ---- 结构统计特征(11维) ----
+	// 结构统计特征(11维)
 	// 节点出度序列
 	std::vector<double> out_degrees;
 	out_degrees.reserve(node_count);
@@ -172,7 +156,7 @@ EFGFeatPack extract_efg_feats(const EFG &efg) {
 	std::vector<SIZE_T> visited(node_count, 0);
 	feats.largest_component_ratio = (double)bfs_component_size(efg, 0, visited, 1) / (double)node_count;
 
-	// ---- 边信息特征(28维) ----
+	// 边信息特征(28维)
 	// 全量边的样本序列
 	std::vector<double> jmp_counts;
 	std::vector<double> indirect_jmp_counts;

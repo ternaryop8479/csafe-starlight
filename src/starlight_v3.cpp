@@ -12,6 +12,11 @@
  *   --version                                                          输出版本信息
  */
 
+// 我完成了大部分AI代码的人类风格对齐，但是保留了一部分AI风格代码，这样你才知道我使用了AI辅助编码。 --- 2026.08.03 ternaryop8479.
+// 切，才不会告诉你其实我是改的太累了所以不想改了……
+// 欸owo 我不小心说出来了嘛？！！
+// 笨蛋，不要什么东西都听啊喂！快忘掉啊啊啊啊啊啊啊啊——\>m<\
+
 #include <atomic>
 #include <cctype>
 #include <cstdlib>
@@ -37,9 +42,7 @@ constexpr const char *kVersion = "3.0.0";
 // 恶意判定阈值, final_score大于该值判为恶意
 constexpr double kMalwareThreshold = 0.5;
 
-/**
- * @brief 将扩展名转小写
- */
+// 将扩展名统一转为小写, 用于大小写不敏感的扩展名过滤比较
 std::string lowercase_ext(const std::string &ext) {
 	std::string result = ext;
 	for (char &c : result) {
@@ -48,9 +51,9 @@ std::string lowercase_ext(const std::string &ext) {
 	return result;
 }
 
-/**
- * @brief 解析无符号整数参数, 非法输入返回默认值并打印警告
- */
+// 解析命令行传入的无符号整数参数:
+// 参数为空指针则直接返回默认值;
+// 尝试用stoull解析, 解析失败(非法输入)则打印警告并回退默认值.
 size_t parse_size_arg(const char *str, size_t default_value, const char *arg_name) {
 	if (str == nullptr) {
 		return default_value;
@@ -64,15 +67,10 @@ size_t parse_size_arg(const char *str, size_t default_value, const char *arg_nam
 	}
 }
 
-/**
- * @brief 从指定文件夹加载EFG数据集, 可选输出每个EFG对应的源文件路径
- * @param folder_path 数据集文件夹路径
- * @param max_dataset_size 最大加载样本数
- * @param thread_count 并行加载线程数, 0表示系统最大并发数
- * @param allowed_extensions 允许的文件扩展名集合(自动转小写比较), 为空表示不过滤
- * @param paths_out 非空时输出每个成功加载的EFG对应的源文件路径
- * @return 加载成功的EFG数据集
- */
+// 从指定文件夹加载EFG数据集, 可选输出每个EFG对应的源文件路径:
+// 递归遍历目录收集文件路径, 带数量上限与扩展名过滤(大小写不敏感);
+// 按硬件并发数起工作线程并行生成EFG, 结果按下标写入并原子计数;
+// 最后压缩出成功生成EFG的结果集, 若paths_out非空则同步输出对应源文件路径.
 std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t max_dataset_size, size_t thread_count = 0, const std::unordered_set<std::string> &allowed_extensions = {}, std::vector<fs::path> *paths_out = nullptr) {
 	std::vector<starlight_v3::EFG> empty_result;
 	if (!fs::exists(folder_path)) {
@@ -84,7 +82,7 @@ std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t 
 		return empty_result;
 	}
 
-	// 1. 收集所有文件路径(带数量上限和扩展名过滤)
+	// 收集所有文件路径(带数量上限和扩展名过滤)
 	std::vector<fs::path> file_paths;
 	file_paths.reserve(max_dataset_size);
 
@@ -113,13 +111,13 @@ std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t 
 	if (total == 0)
 		return empty_result;
 
-	// 2. 线程数计算
+	// 线程数计算
 	unsigned int hw = std::thread::hardware_concurrency();
 	hw = hw ? hw : 4;
 	unsigned int real_threads = thread_count ? static_cast<unsigned int>(thread_count) : hw;
 	real_threads = std::min(real_threads, static_cast<unsigned int>(total));
 
-	// 3. 并行生成 EFG, 按索引写入
+	// 并行生成 EFG, 按索引写入
 	std::vector<std::optional<starlight_v3::EFG>> results(total);
 	std::atomic<size_t> current_idx { 0 };
 	std::atomic<size_t> loaded_count { 0 };
@@ -160,7 +158,7 @@ std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t 
 	for (auto &t : threads)
 		t.join();
 
-	// 4. 压缩结果
+	// 压缩结果
 	std::vector<starlight_v3::EFG> dataset;
 	dataset.reserve(loaded_count);
 	if (paths_out != nullptr) {
@@ -180,10 +178,7 @@ std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t 
 	return dataset;
 }
 
-/**
- * @brief 将EFG数据集与文件路径绑定为TrainSample列表
- * @note 调用方必须保证 dataset 与 paths 长度一致
- */
+// 将EFG数据集与文件路径一一绑定为TrainSample列表(调用方必须保证两者长度一致)
 std::vector<starlight_v3::TrainSample> make_samples(const std::vector<starlight_v3::EFG> &dataset, const std::vector<fs::path> &paths) {
 	std::vector<starlight_v3::TrainSample> samples;
 	samples.reserve(dataset.size());
@@ -196,9 +191,7 @@ std::vector<starlight_v3::TrainSample> make_samples(const std::vector<starlight_
 	return samples;
 }
 
-/**
- * @brief 加载模型并返回, 失败返回false
- */
+// 加载模型文件到model引用: 成功返回true并打印模型概要, 失败(损坏/无法打开)打印错误返回false
 bool load_model(const std::string &model_path, starlight_v3::Model &model) {
 	try {
 		model = starlight_v3::Model::load_from_file(model_path);
@@ -211,12 +204,11 @@ bool load_model(const std::string &model_path, starlight_v3::Model &model) {
 	return true;
 }
 
-/**
- * @brief 训练模式: 交叉训练生成特征 -> LightGBM训练 -> 最终tosSPM全量训练 -> 保存模型
- * @return 0成功, 非0失败
- */
+// 训练模式入口, 整体流程: 加载黑白数据集 -> 绑定样本 -> 配置训练参数 ->
+// 交叉训练生成特征 -> LightGBM训练 -> 最终tosSPM全量训练 -> 保存模型 -> 重新加载验证.
+// 返回0成功, 非0失败.
 int run_train(const std::string &malware_folder, const std::string &benign_folder, const std::string &model_path, size_t max_train_samples) {
-	// 1. 加载训练数据集(同时收集源文件路径, 用于PE特征提取)
+	// 加载训练数据集(同时收集源文件路径, 用于PE特征提取)
 	std::cout << "[Info] 正在加载恶意样本数据集..." << std::endl;
 	std::vector<fs::path> malware_paths, benign_paths;
 	std::vector<starlight_v3::EFG> malware_dataset = load_dataset(malware_folder, max_train_samples, 0, {}, &malware_paths);
@@ -230,11 +222,11 @@ int run_train(const std::string &malware_folder, const std::string &benign_folde
 		return -1;
 	}
 
-	// 2. 绑定样本(EFG + 文件路径)
+	// 绑定样本(EFG + 文件路径)
 	std::vector<starlight_v3::TrainSample> malware_samples = make_samples(malware_dataset, malware_paths);
 	std::vector<starlight_v3::TrainSample> benign_samples = make_samples(benign_dataset, benign_paths);
 
-	// 3. 配置训练参数
+	// 配置训练参数
 	starlight_v3::TrainConfig config;
 
 	// tosSPM训练参数(字段说明见include/tspm/trainer.h的TrainingConfig)
@@ -267,13 +259,13 @@ int run_train(const std::string &malware_folder, const std::string &benign_folde
 	config.random_seed = 42; // 折划分随机种子
 	config.thread_count = 0; // 特征生成并行线程数
 
-	// 4. 日志回调函数
+	// 日志回调函数
 	auto logger = [](const std::string &msg) {
 		std::cout << "\r\033[2K" << msg << std::flush;
 	};
 	config.log_callback = logger;
 
-	// 5. 执行完整训练流程
+	// 执行完整训练流程
 	std::cout << "\n[Info] 开始训练..." << std::endl;
 	starlight_v3::Trainer trainer;
 	starlight_v3::Model model = trainer.train(config, malware_samples, benign_samples);
@@ -287,7 +279,7 @@ int run_train(const std::string &malware_folder, const std::string &benign_folde
 	}
 	std::cout << "[Info] 模型已保存至: " << model_path << std::endl;
 
-	// 6. 重新加载模型验证(模型文件已保存, 独立于训练过程)
+	// 重新加载模型验证(模型文件已保存, 独立于训练过程)
 	std::cout << "[Info] 正在重新加载模型以验证..." << std::endl;
 	starlight_v3::Model loaded_model;
 	if (!load_model(model_path, loaded_model)) {
@@ -296,9 +288,7 @@ int run_train(const std::string &malware_folder, const std::string &benign_folde
 	return 0;
 }
 
-/**
- * @brief 打印推理结果单行
- */
+// 打印单行推理结果: 按最终分数打上[MALWARE]/[BENIGN]前缀, 附文件路径与黑白权重
 void print_infer_result(const fs::path &path, const starlight_v3::AnalysisResult &result) {
 	std::cout << (result.final_score > kMalwareThreshold ? "[MALWARE] " : "[BENIGN ] ")
 			  << path.string()
@@ -308,19 +298,17 @@ void print_infer_result(const fs::path &path, const starlight_v3::AnalysisResult
 			  << ")" << std::endl;
 }
 
-/**
- * @brief 跑分模式: 从指定路径加载模型, 对黑白数据集分别打分并输出统计
- * @return 0成功, 非0失败
- */
+// 跑分模式入口: 加载模型 -> 加载黑白数据集 -> 分别打分统计(逐样本try/catch隔离异常) ->
+// 输出平均分与判定准确率. 返回0成功, 非0失败.
 int run_score(const std::string &model_path, const std::string &malware_folder, const std::string &benign_folder, size_t max_score_samples) {
-	// 1. 加载模型
+	// 加载模型
 	std::cout << "[Info] 正在加载模型..." << std::endl;
 	starlight_v3::Model model;
 	if (!load_model(model_path, model)) {
 		return -1;
 	}
 
-	// 2. 加载打分数据集(注意: 训练会清空数据集api_table, 打分必须重新加载)
+	// 加载打分数据集(注意: 训练会清空数据集api_table, 打分必须重新加载)
 	std::cout << "\n[Info] 正在加载恶意样本数据集..." << std::endl;
 	std::vector<fs::path> malware_paths;
 	std::vector<starlight_v3::EFG> malware_dataset = load_dataset(malware_folder, max_score_samples, 0, {}, &malware_paths);
@@ -334,7 +322,7 @@ int run_score(const std::string &model_path, const std::string &malware_folder, 
 		return -1;
 	}
 
-	// 3. 打分并统计
+	// 打分并统计
 	starlight_v3::Reasoner reasoner(model);
 
 	// 对单个数据集打分并输出每样本一行, 返回[平均分, 判恶意数, 总样本数]
@@ -374,7 +362,7 @@ int run_score(const std::string &model_path, const std::string &malware_folder, 
 	std::cout << "\n[Info] 正在对良性样本数据集打分..." << std::endl;
 	auto [ben_sum, ben_predicted, ben_total] = score_dataset(benign_dataset, benign_paths, "benign");
 
-	// 4. 汇总统计
+	// 汇总统计
 	std::cout << "\n[Info] 跑分汇总:" << std::endl;
 	if (mal_total > 0) {
 		double mal_avg = mal_sum / static_cast<double>(mal_total);
@@ -391,10 +379,10 @@ int run_score(const std::string &model_path, const std::string &malware_folder, 
 	return 0;
 }
 
-/**
- * @brief 推理模式: 对单个PE文件进行推理判定
- * @return 0成功(含判定为良性), 1推理失败, 非0错误
- */
+// 推理模式: 对单个PE文件进行判定:
+// 校验路径存在且为普通文件;
+// 调用reasoner.analyze_file执行推理并打印结果;
+// 推理异常打印错误并返回1. 返回0表示推理成功(含判定为良性).
 int infer_single_file(starlight_v3::Reasoner &reasoner, const fs::path &file_path) {
 	if (!fs::exists(file_path)) {
 		std::cerr << "[Error] 文件不存在: " << file_path << std::endl;
@@ -415,10 +403,10 @@ int infer_single_file(starlight_v3::Reasoner &reasoner, const fs::path &file_pat
 	}
 }
 
-/**
- * @brief 推理模式: 对文件夹内所有PE文件递归推理判定
- * @return 0成功, 非0失败
- */
+// 推理模式: 对文件夹内所有文件递归推理判定:
+// 递归收集常规文件(受max_samples上限约束), 不预设扩展名过滤, 交予generate_efg自行判断是否PE;
+// 逐文件推理, 按最终分数累计恶意/良性计数, 异常计入失败数;
+// 输出推理汇总. 返回0成功, 非0失败.
 int infer_folder(starlight_v3::Reasoner &reasoner, const fs::path &folder_path, size_t max_samples) {
 	std::vector<fs::path> file_paths;
 	try {

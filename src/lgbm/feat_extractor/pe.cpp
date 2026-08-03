@@ -36,7 +36,7 @@ namespace {
 
 using starlight_v3::SIZE_T; // 匿名命名空间内使用引擎基础类型
 
-// ---- 关键词判定表 ----
+// 关键词判定表
 // 标准节段名前缀(前缀匹配, 不匹配即视为非标准名称)
 const std::vector<std::string_view> STANDARD_SECTION_PREFIXES = {
 	".text",
@@ -252,17 +252,13 @@ const std::vector<std::string_view> STRING_KEYWORDS = {
 	"SetWindowsHookEx",
 };
 
-// ---- 字符串工具 ----
-/**
- * @brief ASCII大小写不敏感字符比较
- */
+// 字符串工具
+// ASCII大小写不敏感字符比较
 inline bool ieq_char(char a, char b) {
 	return std::tolower((unsigned char)a) == std::tolower((unsigned char)b);
 }
 
-/**
- * @brief 判断haystack是否包含needle(ASCII大小写不敏感)
- */
+// 判断haystack是否包含needle(ASCII大小写不敏感): 按窗口逐字符匹配
 bool icontains(std::string_view haystack, std::string_view needle) {
 	if (needle.empty()) {
 		return true;
@@ -285,9 +281,7 @@ bool icontains(std::string_view haystack, std::string_view needle) {
 	return false;
 }
 
-/**
- * @brief 判断s是否以prefix开头(ASCII大小写不敏感)
- */
+// 判断s是否以prefix开头(ASCII大小写不敏感): 逐前缀字符比较
 bool has_prefix_ci(std::string_view s, std::string_view prefix) {
 	if (prefix.size() > s.size()) {
 		return false;
@@ -300,9 +294,7 @@ bool has_prefix_ci(std::string_view s, std::string_view prefix) {
 	return true;
 }
 
-/**
- * @brief 判断两个字符串是否相等(ASCII大小写不敏感)
- */
+// 判断两个字符串是否相等(ASCII大小写不敏感): 长度相等且逐字符一致
 bool iequals(std::string_view a, std::string_view b) {
 	if (a.size() != b.size()) {
 		return false;
@@ -315,9 +307,7 @@ bool iequals(std::string_view a, std::string_view b) {
 	return true;
 }
 
-/**
- * @brief 将DLL名归一化(转小写并去掉.dll后缀)
- */
+// 将DLL名归一化(转小写并去掉.dll后缀), 用于高危DLL表的模糊匹配
 std::string normalize_dll_name(std::string_view name) {
 	std::string s;
 	s.reserve(name.size());
@@ -330,9 +320,7 @@ std::string normalize_dll_name(std::string_view name) {
 	return s;
 }
 
-/**
- * @brief 判断s是否命中关键字表(ASCII大小写不敏感精确匹配)
- */
+// 判断s是否命中关键字表(ASCII大小写不敏感精确匹配)
 bool in_table(std::string_view s, const std::vector<std::string_view> &table) {
 	for (auto &entry : table) {
 		if (iequals(s, entry)) {
@@ -342,9 +330,7 @@ bool in_table(std::string_view s, const std::vector<std::string_view> &table) {
 	return false;
 }
 
-/**
- * @brief 判断DLL名是否命中高危DLL表
- */
+// 判断DLL名是否命中高危DLL表: 双方先归一化(转小写去.dll)再比较
 bool in_dll_table(std::string_view dll, const std::vector<std::string_view> &table) {
 	std::string normalized = normalize_dll_name(dll);
 	for (auto &entry : table) {
@@ -355,13 +341,9 @@ bool in_dll_table(std::string_view dll, const std::vector<std::string_view> &tab
 	return false;
 }
 
-// ---- 熵计算 ----
-/**
- * @brief 计算字节序列的Shannon熵
- * @param data 字节序列
- * @param len 序列长度
- * @return 熵值(以2为底), 空序列返回0.0
- */
+// 熵计算
+// 计算字节序列的Shannon熵(以2为底): 统计256种字节值频率得到概率分布,
+// 熵 = -sum(p * log2(p)), 空序列返回0.0.
 double shannon_entropy(const uint8_t *data, size_t len) {
 	if (len == 0) {
 		return 0.0;
@@ -381,12 +363,7 @@ double shannon_entropy(const uint8_t *data, size_t len) {
 	return entropy;
 }
 
-/**
- * @brief 根据频次表计算Shannon熵
- * @param freq 256频次表
- * @param total 总样本数
- * @return 熵值, 总数为0时返回0.0
- */
+// 根据256频次表计算Shannon熵: 各字节频率占比p, 熵 = -sum(p * log2(p)), 总数为0时返回0.0
 double entropy_from_freq(const std::array<uint64_t, 256> &freq, uint64_t total) {
 	if (total == 0) {
 		return 0.0;
@@ -402,9 +379,7 @@ double entropy_from_freq(const std::array<uint64_t, 256> &freq, uint64_t total) 
 	return entropy;
 }
 
-/**
- * @brief 根据字符串分布(DLL名->出现次数)计算Shannon熵
- */
+// 根据字符串分布(DLL名->出现次数)计算Shannon熵: 同entropy_from_freq但输入为名->次数映射
 double entropy_from_distribution(const std::unordered_map<std::string, SIZE_T> &freq_map, SIZE_T total) {
 	if (total == 0) {
 		return 0.0;
@@ -417,10 +392,8 @@ double entropy_from_distribution(const std::unordered_map<std::string, SIZE_T> &
 	return entropy;
 }
 
-// ---- 字符串扫描 ----
-/**
- * @brief 字符串扫描累加器
- */
+// 字符串扫描
+// 字符串扫描累加器
 struct StringScanAccum {
 	SIZE_T count = 0; ///< 字符串总数
 	double len_sum = 0.0; ///< 字符串长度之和
@@ -435,9 +408,7 @@ struct StringScanAccum {
 	SIZE_T scanned_bytes = 0; ///< 被扫描的字节总数
 };
 
-/**
- * @brief 判断s从pos位置起是否为点分四段IP
- */
+// 判断s从pos位置起是否为点分四段IP: 每段1~3位数字, 段间以'.'分隔
 bool match_ip_at(std::string_view s, size_t pos) {
 	size_t i = pos;
 	size_t digits = 0;
@@ -465,9 +436,7 @@ bool match_ip_at(std::string_view s, size_t pos) {
 	return true;
 }
 
-/**
- * @brief 判断字符串是否包含点分四段IP
- */
+// 判断字符串是否包含点分四段IP: 逐位置尝试匹配
 bool contains_ip(std::string_view s) {
 	for (size_t i = 0; i < s.size(); ++i) {
 		if (match_ip_at(s, i)) {
@@ -477,9 +446,9 @@ bool contains_ip(std::string_view s) {
 	return false;
 }
 
-/**
- * @brief 扫描一段字节并累加字符串统计(可打印串: run>=4的0x20~0x7E连续序列)
- */
+// 扫描一段字节并累加字符串统计:
+// 跳过不可打印字节(0x20~0x7E之外), 连续可打印run长度>=4才计为一条字符串;
+// 对每条字符串按run长度与内容匹配URL/路径/注册表/IP/可疑关键词, 累加各分类计数.
 void scan_bytes_strings(StringScanAccum &acc, const uint8_t *data, size_t len) {
 	acc.scanned_bytes += (SIZE_T)len;
 	size_t i = 0;
@@ -528,10 +497,8 @@ void scan_bytes_strings(StringScanAccum &acc, const uint8_t *data, size_t len) {
 	}
 }
 
-// ---- PE数据结构 ----
-/**
- * @brief 节段信息
- */
+// PE数据结构
+// 节段信息
 struct SectionInfo {
 	std::string name;
 	uint32_t virtual_address = 0;
@@ -542,9 +509,7 @@ struct SectionInfo {
 	double entropy = 0.0;
 };
 
-/**
- * @brief PE32/PE32+可选头的统一视图
- */
+// PE32/PE32+可选头的统一视图: 屏蔽两种可选头结构差异, 供特征提取统一读取
 struct OptView {
 	uint16_t major_linker = 0;
 	uint16_t minor_linker = 0;
@@ -574,9 +539,8 @@ struct OptView {
 	bool valid = false; ///< 可选头是否可识别(PE32/PE32+)
 };
 
-/**
- * @brief 根据Magic构建可选头统一视图
- */
+// 根据Magic构建可选头统一视图: 先校验Magic(0x10b=PE32, 0x20b=PE32+),
+// 再按对应结构体逐字段拷贝到统一视图, 无法识别的Magic返回valid=false的默认视图.
 OptView make_opt_view(const peparse::pe_header &header) {
 	OptView view;
 	uint16_t magic = header.nt.OptionalMagic;
@@ -647,17 +611,13 @@ OptView make_opt_view(const peparse::pe_header &header) {
 	return view;
 }
 
-/**
- * @brief 节段迭代上下文(收集节段信息与不可执行段的字符串统计)
- */
+// 节段迭代上下文(收集节段信息与不可执行段的字符串统计)
 struct SectionScanCtx {
 	std::vector<SectionInfo> sections;
 	StringScanAccum strings;
 };
 
-/**
- * @brief 节段迭代回调
- */
+// 节段迭代回调: 记录节段信息(名称/地址/大小/特征/熵), 并对不可执行段执行字符串扫描
 int section_callback(void *ctx, const peparse::VA &, const std::string &sec_name,
 	const peparse::image_section_header &sec, const peparse::bounded_buffer *sec_data) {
 	auto *scan = static_cast<SectionScanCtx *>(ctx);
@@ -681,17 +641,13 @@ int section_callback(void *ctx, const peparse::VA &, const std::string &sec_name
 	return 0;
 }
 
-/**
- * @brief 导入信息
- */
+// 导入信息
 struct ImportInfo {
 	std::string dll;
 	std::string func;
 };
 
-/**
- * @brief 导入表迭代回调
- */
+// 导入表迭代回调: 记录每个导入函数所属DLL与函数名
 int import_callback(void *ctx, const peparse::VA &, const std::string &module, const std::string &symbol) {
 	auto *imports = static_cast<std::vector<ImportInfo> *>(ctx);
 	ImportInfo info;
@@ -701,9 +657,7 @@ int import_callback(void *ctx, const peparse::VA &, const std::string &module, c
 	return 0;
 }
 
-/**
- * @brief parsed_pe的RAII守卫, 任何退出路径(含异常)都会释放pe-parse分配的内存
- */
+// parsed_pe的RAII守卫, 任何退出路径(含异常)都会释放pe-parse分配的内存
 class ParsedPEGuard {
 public:
 	explicit ParsedPEGuard(peparse::parsed_pe *pe) : pe_(pe) {
@@ -734,7 +688,7 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 	}
 	ParsedPEGuard pe_guard(pe); // RAII: 任何退出路径(含异常)都释放pe-parse分配的内存
 
-	// ---- PE头特征(29维) ----
+	// PE头特征(29维)
 	const peparse::file_header &file_header = pe->peHeader.nt.FileHeader;
 	feats.machine_type = file_header.Machine;
 	feats.is_64bit = (pe->peHeader.nt.OptionalMagic == 0x20b) || (file_header.Machine == 0x8664);
@@ -770,7 +724,7 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 		feats.number_of_rva_and_sizes = opt.number_of_rva_and_sizes;
 	}
 
-	// ---- 节段统计(12维) + 节段熵(7维) + 字符串(10维) ----
+	// 节段统计(12维) + 节段熵(7维) + 字符串(10维)
 	SectionScanCtx scan;
 	try {
 		peparse::IterSec(pe, &section_callback, &scan);
@@ -908,7 +862,7 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 	feats.ip_count = scan.strings.ip_count;
 	feats.suspicious_keyword_count = scan.strings.kw_count;
 
-	// ---- 导入表特征(21维) ----
+	// 导入表特征(21维)
 	std::vector<ImportInfo> imports;
 	try {
 		peparse::IterImpVAString(pe, &import_callback, &imports);
@@ -1011,7 +965,7 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 	}
 	feats.import_dir_size = opt.valid ? opt.dirs[peparse::DIR_IMPORT].Size : 0;
 
-	// ---- 结构统计特征(10维) + 整文件熵 ----
+	// 结构统计特征(10维) + 整文件熵
 	uint64_t file_size = 0;
 	if (pe->fileBuffer != nullptr) {
 		file_size = pe->fileBuffer->bufLen;

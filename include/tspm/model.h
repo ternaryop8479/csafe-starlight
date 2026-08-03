@@ -5,6 +5,8 @@
  * @date 2026-07-26
  */
 
+// 洛殿生日快乐喵~ n>w<n --- 2026.07.12 ternaryop8479.
+
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_TSPM_MODEL_H
 #define CSAFE_STARLIGHT_V3_INCLUDE_TSPM_MODEL_H
 

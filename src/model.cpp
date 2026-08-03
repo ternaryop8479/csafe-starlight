@@ -13,183 +13,183 @@
 
 #include "model.h"
 
-namespace starlight_v3 {
-
 namespace {
 
-	// 模型文件的魔数与版本号
-	constexpr char kModelMagic[8] = { 'C', 'S', 'L', 'G', 'B', 'M', 'V', '1' };
-	constexpr uint32_t kModelVersion = 1;
+// 模型文件的魔数与版本号
+constexpr char kModelMagic[8] = { 'C', 'S', 'L', 'G', 'B', 'M', 'V', '1' };
+constexpr uint32_t kModelVersion = 1;
 
-	// 二进制写缓冲, 所有写入均使用固定宽度类型(uint32_t/uint64_t/double)
-	class BufferWriter {
-	public:
-		std::string data; ///< 序列化产物
+// 二进制写缓冲, 所有写入均使用固定宽度类型(uint32_t/uint64_t/double)
+class BufferWriter {
+public:
+	std::string data; ///< 序列化产物
 
-		template <typename T>
-		void put(T value) {
-			data.append(reinterpret_cast<const char *>(&value), sizeof(T));
-		}
-
-		// 写入字符串: 4字节长度 + 原始字节
-		void put_string(const std::string &str) {
-			put(static_cast<uint32_t>(str.size()));
-			data.append(str);
-		}
-	};
-
-	// 二进制读缓冲, 读取时带越界检查
-	class BufferReader {
-	public:
-		const char *ptr; ///< 当前读取位置
-		const char *end; ///< 缓冲末尾
-
-		explicit BufferReader(const std::string &data) : ptr(data.data()), end(data.data() + data.size()) {
-		}
-
-		// 读取一个固定宽度类型, 越界返回false
-		template <typename T>
-		bool get(T &value) {
-			if (ptr + sizeof(T) > end) {
-				return false;
-			}
-			std::memcpy(&value, ptr, sizeof(T));
-			ptr += sizeof(T);
-			return true;
-		}
-
-		// 读取字符串, 越界返回false
-		bool get_string(std::string &str) {
-			uint32_t length = 0;
-			if (!get(length)) {
-				return false;
-			}
-			if (ptr + length > end) {
-				return false;
-			}
-			str.assign(ptr, length);
-			ptr += length;
-			return true;
-		}
-	};
-
-	// 序列化tosSPM模型到二进制缓冲
-	std::string serialize_tspm_model(const tspm::Model &model) {
-		BufferWriter writer;
-
-		// API映射表: 数量 + 每个API名字(4字节长度 + 字节)
-		const std::vector<std::string> &table = model.api_table.get_table();
-		writer.put(static_cast<uint64_t>(table.size()));
-		for (const std::string &name : table) {
-			writer.put_string(name);
-		}
-
-		// Trie树节点: 数量 + 每个节点(api_id + trans_start + trans_count + weight)
-		writer.put(static_cast<uint64_t>(model.nodes.size()));
-		for (const tspm::TrieNode &node : model.nodes) {
-			writer.put(static_cast<uint32_t>(node.api_id));
-			writer.put(static_cast<uint32_t>(node.trans_start));
-			writer.put(static_cast<uint32_t>(node.trans_count));
-			writer.put(node.weight);
-		}
-
-		// Trie树边列表: 数量 + 每条边(目标节点在nodes数组中的索引)
-		writer.put(static_cast<uint64_t>(model.edges.size()));
-		for (SIZE_T edge : model.edges) {
-			writer.put(static_cast<uint32_t>(edge));
-		}
-
-		// 模型参数
-		writer.put(model.max_skip);
-
-		return writer.data;
+	template <typename T>
+	void put(T value) {
+		data.append(reinterpret_cast<const char *>(&value), sizeof(T));
 	}
 
-	// 从二进制缓冲反序列化tosSPM模型, 失败抛异常
-	tspm::Model deserialize_tspm_model(BufferReader &reader) {
-		tspm::Model model;
-
-		// API映射表
-		uint64_t table_size = 0;
-		if (!reader.get(table_size)) {
-			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (api table count)");
-		}
-		// 防御: 每个API名至少4字节长度前缀+1字节内容, 数量超界说明文件被篡改, 避免触发超大分配(bad_alloc/length_error)
-		if (table_size > static_cast<uint64_t>(reader.end - reader.ptr) / 5u) {
-			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (api table count exceeds remaining data)");
-		}
-		std::vector<std::string> names(static_cast<size_t>(table_size));
-		for (uint64_t i = 0; i < table_size; ++i) {
-			if (!reader.get_string(names[static_cast<size_t>(i)])) {
-				throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (api table content)");
-			}
-		}
-		model.api_table = APITable(names);
-
-		// Trie树节点
-		uint64_t node_count = 0;
-		if (!reader.get(node_count)) {
-			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (node count)");
-		}
-		// 防御: 每个节点固定28字节, 数量超界说明文件被篡改
-		if (node_count > static_cast<uint64_t>(reader.end - reader.ptr) / 28u) {
-			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (node count exceeds remaining data)");
-		}
-		model.nodes.resize(static_cast<size_t>(node_count));
-		for (uint64_t i = 0; i < node_count; ++i) {
-			tspm::TrieNode &node = model.nodes[static_cast<size_t>(i)];
-			uint32_t api_id = 0, trans_start = 0, trans_count = 0;
-			if (!reader.get(api_id) || !reader.get(trans_start) || !reader.get(trans_count) || !reader.get(node.weight)) {
-				throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (node content)");
-			}
-			node.api_id = api_id;
-			node.trans_start = trans_start;
-			node.trans_count = trans_count;
-		}
-
-		// Trie树边列表
-		uint64_t edge_count = 0;
-		if (!reader.get(edge_count)) {
-			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (edge count)");
-		}
-		// 防御: 每条边固定4字节, 数量超界说明文件被篡改
-		if (edge_count > static_cast<uint64_t>(reader.end - reader.ptr) / 4u) {
-			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (edge count exceeds remaining data)");
-		}
-		model.edges.resize(static_cast<size_t>(edge_count));
-		for (uint64_t i = 0; i < edge_count; ++i) {
-			uint32_t edge = 0;
-			if (!reader.get(edge)) {
-				throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (edge content)");
-			}
-			model.edges[static_cast<size_t>(i)] = edge;
-		}
-
-		// 模型参数
-		if (!reader.get(model.max_skip)) {
-			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (model parameter)");
-		}
-
-		// 语义校验: 防止损坏/篡改的模型文件导致推理时越界读
-		// 注意: Trie根节点的api_id为INVALID_NUM(哨兵值, 见src/tspm/trainer.cpp的模型生成), 需放行
-		for (const tspm::TrieNode &node : model.nodes) {
-			if (node.api_id != starlight_v3::INVALID_NUM && node.api_id >= names.size()) {
-				throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (node api_id out of api table range)");
-			}
-			if (static_cast<uint64_t>(node.trans_start) + static_cast<uint64_t>(node.trans_count) > model.edges.size()) {
-				throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (node edge range out of edge list)");
-			}
-		}
-		for (SIZE_T edge : model.edges) {
-			if (edge >= node_count) {
-				throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (edge points to nonexistent node)");
-			}
-		}
-
-		return model;
+	// 写入字符串: 4字节长度 + 原始字节
+	void put_string(const std::string &str) {
+		put(static_cast<uint32_t>(str.size()));
+		data.append(str);
 	}
+};
+
+// 二进制读缓冲, 读取时带越界检查
+class BufferReader {
+public:
+	const char *ptr; ///< 当前读取位置
+	const char *end; ///< 缓冲末尾
+
+	explicit BufferReader(const std::string &data) : ptr(data.data()), end(data.data() + data.size()) {
+	}
+
+	// 读取一个固定宽度类型, 越界返回false
+	template <typename T>
+	bool get(T &value) {
+		if (ptr + sizeof(T) > end) {
+			return false;
+		}
+		std::memcpy(&value, ptr, sizeof(T));
+		ptr += sizeof(T);
+		return true;
+	}
+
+	// 读取字符串, 越界返回false
+	bool get_string(std::string &str) {
+		uint32_t length = 0;
+		if (!get(length)) {
+			return false;
+		}
+		if (ptr + length > end) {
+			return false;
+		}
+		str.assign(ptr, length);
+		ptr += length;
+		return true;
+	}
+};
+
+// 序列化tosSPM模型到二进制缓冲
+std::string serialize_tspm_model(const starlight_v3::tspm::Model &model) {
+	BufferWriter writer;
+
+	// API映射表: 数量 + 每个API名字(4字节长度 + 字节)
+	const std::vector<std::string> &table = model.api_table.get_table();
+	writer.put(static_cast<uint64_t>(table.size()));
+	for (const std::string &name : table) {
+		writer.put_string(name);
+	}
+
+	// Trie树节点: 数量 + 每个节点(api_id + trans_start + trans_count + weight)
+	writer.put(static_cast<uint64_t>(model.nodes.size()));
+	for (const starlight_v3::tspm::TrieNode &node : model.nodes) {
+		writer.put(static_cast<uint32_t>(node.api_id));
+		writer.put(static_cast<uint32_t>(node.trans_start));
+		writer.put(static_cast<uint32_t>(node.trans_count));
+		writer.put(node.weight);
+	}
+
+	// Trie树边列表: 数量 + 每条边(目标节点在nodes数组中的索引)
+	writer.put(static_cast<uint64_t>(model.edges.size()));
+	for (starlight_v3::SIZE_T edge : model.edges) {
+		writer.put(static_cast<uint32_t>(edge));
+	}
+
+	// 模型参数
+	writer.put(model.max_skip);
+
+	return writer.data;
+}
+
+// 从二进制缓冲反序列化tosSPM模型, 失败抛异常
+starlight_v3::tspm::Model deserialize_tspm_model(BufferReader &reader) {
+	starlight_v3::tspm::Model model;
+
+	// API映射表
+	uint64_t table_size = 0;
+	if (!reader.get(table_size)) {
+		throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (api table count)");
+	}
+	// 防御: 每个API名至少4字节长度前缀+1字节内容, 数量超界说明文件被篡改, 避免触发超大分配(bad_alloc/length_error)
+	if (table_size > static_cast<uint64_t>(reader.end - reader.ptr) / 5u) {
+		throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (api table count exceeds remaining data)");
+	}
+	std::vector<std::string> names(static_cast<size_t>(table_size));
+	for (uint64_t i = 0; i < table_size; ++i) {
+		if (!reader.get_string(names[static_cast<size_t>(i)])) {
+			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (api table content)");
+		}
+	}
+	model.api_table = starlight_v3::APITable(names);
+
+	// Trie树节点
+	uint64_t node_count = 0;
+	if (!reader.get(node_count)) {
+		throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (node count)");
+	}
+	// 防御: 每个节点固定28字节, 数量超界说明文件被篡改
+	if (node_count > static_cast<uint64_t>(reader.end - reader.ptr) / 28u) {
+		throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (node count exceeds remaining data)");
+	}
+	model.nodes.resize(static_cast<size_t>(node_count));
+	for (uint64_t i = 0; i < node_count; ++i) {
+		starlight_v3::tspm::TrieNode &node = model.nodes[static_cast<size_t>(i)];
+		uint32_t api_id = 0, trans_start = 0, trans_count = 0;
+		if (!reader.get(api_id) || !reader.get(trans_start) || !reader.get(trans_count) || !reader.get(node.weight)) {
+			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (node content)");
+		}
+		node.api_id = api_id;
+		node.trans_start = trans_start;
+		node.trans_count = trans_count;
+	}
+
+	// Trie树边列表
+	uint64_t edge_count = 0;
+	if (!reader.get(edge_count)) {
+		throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (edge count)");
+	}
+	// 防御: 每条边固定4字节, 数量超界说明文件被篡改
+	if (edge_count > static_cast<uint64_t>(reader.end - reader.ptr) / 4u) {
+		throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (edge count exceeds remaining data)");
+	}
+	model.edges.resize(static_cast<size_t>(edge_count));
+	for (uint64_t i = 0; i < edge_count; ++i) {
+		uint32_t edge = 0;
+		if (!reader.get(edge)) {
+			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (edge content)");
+		}
+		model.edges[static_cast<size_t>(i)] = edge;
+	}
+
+	// 模型参数
+	if (!reader.get(model.max_skip)) {
+		throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (model parameter)");
+	}
+
+	// 语义校验: 防止损坏/篡改的模型文件导致推理时越界读
+	// 注意: Trie根节点的api_id为INVALID_NUM(哨兵值, 见src/tspm/trainer.cpp的模型生成), 需放行
+	for (const starlight_v3::tspm::TrieNode &node : model.nodes) {
+		if (node.api_id != starlight_v3::INVALID_NUM && node.api_id >= names.size()) {
+			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (node api_id out of api table range)");
+		}
+		if (static_cast<uint64_t>(node.trans_start) + static_cast<uint64_t>(node.trans_count) > model.edges.size()) {
+			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (node edge range out of edge list)");
+		}
+	}
+	for (starlight_v3::SIZE_T edge : model.edges) {
+		if (edge >= node_count) {
+			throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (edge points to nonexistent node)");
+		}
+	}
+
+	return model;
+}
 
 } // namespace
+
+namespace starlight_v3 {
 
 // 构造函数
 Model::Model(const tspm::Model &tspm_model, const lgbm::Model &lgbm_model) : tspm_model_(tspm_model), lgbm_model_(lgbm_model) {

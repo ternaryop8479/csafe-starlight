@@ -16,9 +16,7 @@
 // 内部工具函数
 namespace {
 
-/**
- * @brief 单维数值序列的统计结果
- */
+// 单维数值序列的统计结果
 struct SampleStats {
 	double mean = 0.0; ///< 均值
 	double var = 0.0; ///< 总体方差
@@ -26,13 +24,9 @@ struct SampleStats {
 	double max = 0.0; ///< 最大值
 };
 
-/**
- * @brief 计算数值序列的均值/总体方差/偏度/最大值
- *
- * 偏度使用g1 = m3 / sigma^3, 序列长度不足3或标准差趋近于0时置0.0.
- * @param samples 数值序列
- * @return 统计结果, 序列为空时全部为0.0
- */
+// 计算数值序列的均值/总体方差/偏度/最大值:
+// 序列为空时直接返回全0的统计结果;
+// 偏度使用g1 = m3 / sigma^3, 序列长度不足3或标准差趋近于0时置0.0.
 SampleStats calc_sample_stats(const std::vector<double> &samples) {
 	SampleStats stats;
 	starlight_v3::SIZE_T n = (starlight_v3::SIZE_T)samples.size();
@@ -69,13 +63,8 @@ SampleStats calc_sample_stats(const std::vector<double> &samples) {
 	return stats;
 }
 
-/**
- * @brief 计算EFG中每个节点到入口节点(节点0)的有向边数
- *
- * 沿出边方向BFS, 不可达节点的距离为INVALID_NUM.
- * @param efg 目标EFG
- * @return 距离数组, 下标对应EFG节点下标
- */
+// 计算EFG中每个节点到入口节点(节点0)的有向边数:
+// 沿出边方向BFS, 节点0距离为0, 逐层标记, 不可达节点的距离保持INVALID_NUM.
 std::vector<starlight_v3::SIZE_T> calc_entry_distances(const starlight_v3::EFG &efg) {
 	starlight_v3::SIZE_T node_count = (starlight_v3::SIZE_T)efg.nodes_.size();
 	std::vector<starlight_v3::SIZE_T> dist(node_count, starlight_v3::INVALID_NUM);
@@ -104,9 +93,7 @@ std::vector<starlight_v3::SIZE_T> calc_entry_distances(const starlight_v3::EFG &
 	return dist;
 }
 
-/**
- * @brief 单个类(恶意/良性)的链条统计累加器
- */
+// 单个类(恶意/良性)的链条统计累加器
 struct ClassAccum {
 	starlight_v3::SIZE_T chain_count = 0; ///< 链数
 	double length_sum = 0.0; ///< 各链长度之和(含跳过)
@@ -122,20 +109,13 @@ struct ClassAccum {
 	std::unordered_set<starlight_v3::SIZE_T> covered; ///< 链路径覆盖的EFG节点下标去重集合
 };
 
-/**
- * @brief 统计证据森林中所有链条的累加器
- */
+// 统计证据森林中所有链条的累加器
 class ChainAccumulator {
 public:
-	/**
-	 * @brief 遍历证据森林并累加全部链条的统计量
-	 * @details 证据树是DAG(同一子树被多个父节点共享), 若按路径实例展开遍历,
-	 * 共享节点级联时路径数会指数级爆炸导致内存失控. 因此使用visited集合对
-	 * 每个树节点去重, 每个节点只统计一次, 链按其首次被访问时的路径记录.
-	 * @param roots 证据森林根节点列表
-	 * @param dist EFG入口距离数组
-	 * @param efg 目标EFG
-	 */
+	// 遍历证据森林并累加全部链条的统计量:
+	// 证据树是DAG(同一子树被多个父节点共享), 若按路径实例展开遍历, 共享节点级联时
+	// 路径数会指数级爆炸导致内存失控. 因此使用visited集合对每个树节点去重,
+	// 每个节点只统计一次, 链按其首次被访问时的路径记录.
 	void walk_forest(const std::vector<std::shared_ptr<starlight_v3::tspm::EvidenceTree>> &roots, const std::vector<starlight_v3::SIZE_T> &dist, const starlight_v3::EFG &efg) {
 		std::unordered_set<const starlight_v3::tspm::EvidenceTree *> visited; // 已访问节点集合, 用于DAG去重剪枝
 		for (const auto &root : roots) {
@@ -148,10 +128,8 @@ public:
 	ClassAccum ben_; ///< 良性链统计
 
 private:
-	/**
-	 * @brief 递归遍历单个证据树节点, 每到达一个带权重节点即完成一条链
-	 * @details 每个节点仅处理一次(visited去重), 已访问节点直接返回, 保证遍历复杂度为O(节点数)
-	 */
+	// 递归遍历单个证据树节点, 每到达一个带权重节点即完成一条链:
+	// 每个节点仅处理一次(visited去重), 已访问节点直接返回, 保证遍历复杂度为O(节点数).
 	void walk_node(const starlight_v3::tspm::EvidenceTree *node, std::vector<const starlight_v3::tspm::EvidenceTree *> &path, const std::vector<starlight_v3::SIZE_T> &dist, const starlight_v3::EFG &efg, std::unordered_set<const starlight_v3::tspm::EvidenceTree *> &visited) {
 		// DAG去重: 当前节点已访问过则直接返回, 不重复统计
 		if (!visited.insert(node).second) {
@@ -168,9 +146,7 @@ private:
 		path.pop_back();
 	}
 
-	/**
-	 * @brief 根据一条链的路径累加统计量
-	 */
+	// 根据一条链的路径累加统计量
 	void collect_chain(const std::vector<const starlight_v3::tspm::EvidenceTree *> &path, const std::vector<starlight_v3::SIZE_T> &dist, const starlight_v3::EFG &efg) {
 		const starlight_v3::tspm::EvidenceTree *terminal = path.back();
 		ClassAccum &acc = (terminal->weight > 0.0) ? mal_ : ben_;
@@ -229,7 +205,7 @@ TSPMFeatPack extract_tspm_feats(const tspm::AnalysisResult &result, const EFG &e
 
 	SIZE_T efg_node_count = (SIZE_T)efg.nodes_.size();
 
-	// ---- 恶意链统计 ----
+	// 恶意链统计
 	SampleStats mal_len_stats = calc_sample_stats(accumulator.mal_.lengths);
 	SampleStats mal_weight_stats = calc_sample_stats(accumulator.mal_.weights);
 	SampleStats mal_density_stats = calc_sample_stats(accumulator.mal_.weight_densities);
@@ -258,7 +234,7 @@ TSPMFeatPack extract_tspm_feats(const tspm::AnalysisResult &result, const EFG &e
 	feats.avg_malchain_branching = mal_branch_avg;
 	feats.max_malchain_branching = accumulator.mal_.branch_max;
 
-	// ---- 良性链统计 ----
+	// 良性链统计
 	SampleStats ben_len_stats = calc_sample_stats(accumulator.ben_.lengths);
 	SampleStats ben_weight_stats = calc_sample_stats(accumulator.ben_.weights);
 	SampleStats ben_density_stats = calc_sample_stats(accumulator.ben_.weight_densities);
@@ -287,7 +263,7 @@ TSPMFeatPack extract_tspm_feats(const tspm::AnalysisResult &result, const EFG &e
 	feats.avg_benchain_branching = ben_branch_avg;
 	feats.max_benchain_branching = accumulator.ben_.branch_max;
 
-	// ---- 跨类比较特征 ----
+	// 跨类比较特征
 	bool mal_has_chain = accumulator.mal_.chain_count > 0;
 	bool ben_has_chain = accumulator.ben_.chain_count > 0;
 	feats.mal_ben_avglength_ratio = (mal_has_chain && ben_has_chain) ? mal_len_stats.mean / ben_len_stats.mean : 0.0;
@@ -295,7 +271,7 @@ TSPMFeatPack extract_tspm_feats(const tspm::AnalysisResult &result, const EFG &e
 	feats.chain_count_diff = (accumulator.mal_.chain_count >= accumulator.ben_.chain_count) ? accumulator.mal_.chain_count - accumulator.ben_.chain_count : accumulator.ben_.chain_count - accumulator.mal_.chain_count;
 	feats.is_mal_dominant = mal_has_chain && (!ben_has_chain || accumulator.mal_.max_length >= accumulator.ben_.max_length);
 
-	// ---- 引擎输出特征 ----
+	// 引擎输出特征
 	feats.tspm_mal_weight = result.malware_score;
 	feats.tspm_ben_weight = result.benign_score;
 	feats.weight_diff = result.malware_score - result.benign_score;

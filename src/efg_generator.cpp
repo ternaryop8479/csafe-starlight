@@ -1,4 +1,4 @@
-/*
+/**
  * @file efg_generator.cpp
  * @brief 程序的EFG提取器实现
  * @author ternaryop8479
@@ -143,17 +143,17 @@ PEParser::~PEParser() {
 }
 
 bool PEParser::parse() {
-	// 1. 解析PE文件, 失败(非PE或严重损坏)直接返回false
+	// 解析PE文件, 失败(非PE或严重损坏)直接返回false
 	impl_->pe_ = peparse::ParsePEFromFile(impl_->file_path_.c_str());
 	if (!impl_->pe_)
 		return false;
 
-	// 2. 获取入口点虚拟地址
+	// 获取入口点虚拟地址
 	peparse::VA entry_va = 0;
 	if (!peparse::GetEntryPoint(impl_->pe_, entry_va))
 		return false;
 
-	// 3. 先判定PE格式再取image_base: PE32+的ImageBase在OptionalHeader64中是64位字段,
+	// 先判定PE格式再取image_base: PE32+的ImageBase在OptionalHeader64中是64位字段,
 	//    若按PE32结构读取会把高32位截断, 导致入口/导入RVA全部算错
 	impl_->is_64bit_ = (impl_->pe_->peHeader.nt.OptionalMagic == 0x20b);
 	impl_->image_base_ = impl_->is_64bit_
@@ -161,7 +161,7 @@ bool PEParser::parse() {
 		: impl_->pe_->peHeader.nt.OptionalHeader.ImageBase;
 	impl_->entry_point_rva_ = entry_va - impl_->image_base_;
 
-	// 4. 迭代提取导入表与节段, 异常统一在最小作用域内消化
+	// 迭代提取导入表与节段, 异常统一在最小作用域内消化
 	try {
 		peparse::IterImpVAString(impl_->pe_, &Impl::import_callback, impl_.get());
 	} catch (const std::exception &e) {
@@ -607,7 +607,7 @@ void EFGBuilder::Impl::preprocess_thunks(
 EFG EFGBuilder::Impl::to_efg() {
 	EFG efg;
 
-	// 1. 收集所有已经被EFG引用的导入函数名（即被调用过的导入函数）
+	// 收集所有已经被EFG引用的导入函数名（即被调用过的导入函数）
 	std::unordered_set<std::string> used_import_names;
 	for (const auto &[rva, node] : api_nodes_) {
 		if (!node.is_entry_) {
@@ -615,7 +615,7 @@ EFG EFGBuilder::Impl::to_efg() {
 		}
 	}
 
-	// 2. 为每个存在导入表中但未被调用的函数创建孤立节点，作为单独的连通分量
+	// 为每个存在导入表中但未被调用的函数创建孤立节点，作为单独的连通分量
 	constexpr uint64_t IMPORT_NODE_BASE = 0x100000000ULL;
 	std::unordered_set<std::string> added_unused_imports;
 	for (const auto &imp : parser_.get_imports()) {
@@ -633,28 +633,28 @@ EFG EFGBuilder::Impl::to_efg() {
 		added_unused_imports.insert(name);
 	}
 
-	// 3. 收集所有节点RVA
+	// 收集所有节点RVA
 	std::vector<uint64_t> node_rvas;
 	node_rvas.reserve(api_nodes_.size());
 	for (const auto &[rva, node] : api_nodes_) {
 		node_rvas.push_back(rva);
 	}
 
-	// 4. ROOT节点（0xFFFFFFFF）排在第0位，其余按RVA排序保证确定性
+	// ROOT节点（0xFFFFFFFF）排在第0位，其余按RVA排序保证确定性
 	auto root_it = std::find(node_rvas.begin(), node_rvas.end(), ENTRY_NODE_RVA);
 	if (root_it != node_rvas.end() && root_it != node_rvas.begin()) {
 		std::iter_swap(root_it, node_rvas.begin());
 	}
 	std::sort(node_rvas.begin() + 1, node_rvas.end());
 
-	// 5. 构建RVA到节点索引的映射
+	// 构建RVA到节点索引的映射
 	std::unordered_map<uint64_t, SIZE_T> rva_to_index;
 	rva_to_index.reserve(node_rvas.size());
 	for (SIZE_T i = 0; i < static_cast<SIZE_T>(node_rvas.size()); ++i) {
 		rva_to_index[node_rvas[i]] = i;
 	}
 
-	// 6. 插入API名，获取ID，直接存入 nodes_ 数组
+	// 插入API名，获取ID，直接存入 nodes_ 数组
 	efg.nodes_.reserve(node_rvas.size());
 	for (uint64_t rva : node_rvas) {
 		const auto &node = api_nodes_.at(rva);
@@ -667,7 +667,7 @@ EFG EFGBuilder::Impl::to_efg() {
 		}
 	}
 
-	// 7. 构建边，将源节点和目标节点的索引存入边结构
+	// 构建边，将源节点和目标节点的索引存入边结构
 	struct EdgeEntry {
 		SIZE_T from_index;
 		SIZE_T to_index;
@@ -684,7 +684,7 @@ EFG EFGBuilder::Impl::to_efg() {
 		edge_entries.push_back({ from_it->second, to_it->second, &edge });
 	}
 
-	// 8. 按源节点索引排序，符合CSR格式规范
+	// 按源节点索引排序，符合CSR格式规范
 	std::sort(edge_entries.begin(), edge_entries.end(),
 		[](const EdgeEntry &a, const EdgeEntry &b) {
 			if (a.from_index != b.from_index)
@@ -692,7 +692,7 @@ EFG EFGBuilder::Impl::to_efg() {
 			return a.to_index < b.to_index;
 		});
 
-	// 9. 构建 CSR 的 offset 数组(前缀和)
+	// 构建 CSR 的 offset 数组(前缀和)
 	SIZE_T num_nodes = static_cast<SIZE_T>(node_rvas.size());
 	efg.offeset_.resize(num_nodes + 1, 0);
 	for (const auto &entry : edge_entries) {
@@ -702,7 +702,7 @@ EFG EFGBuilder::Impl::to_efg() {
 		efg.offeset_[i] += efg.offeset_[i - 1];
 	}
 
-	// 10. 填充 edges 数组(按CSR的cursor定位写入位置)
+	// 填充 edges 数组(按CSR的cursor定位写入位置)
 	efg.edges_.resize(edge_entries.size());
 	std::vector<SIZE_T> cursor(num_nodes, 0);
 	for (const auto &entry : edge_entries) {
@@ -734,18 +734,18 @@ EFG EFGBuilder::build() {
 }
 
 std::pair<bool, EFG> generate_efg(const std::string &file_path) {
-	// 1. 解析PE文件, 失败(非PE/严重损坏)返回空EFG
+	// 解析PE文件, 失败(非PE/严重损坏)返回空EFG
 	PEParser parser(file_path);
 	if (!parser.parse()) {
 		return { false, EFG {} };
 	}
 
-	// 2. 无可执行段或入口无效则无法构建调用图, 返回空EFG
+	// 无可执行段或入口无效则无法构建调用图, 返回空EFG
 	if (parser.get_exec_sections().empty() || parser.get_entry_point() == 0) {
 		return { false, EFG {} };
 	}
 
-	// 3. 构建EFG: 反汇编遍历控制流, 提取节点与边
+	// 构建EFG: 反汇编遍历控制流, 提取节点与边
 	EFGBuilder builder(parser);
 	EFG efg = builder.build();
 
