@@ -129,8 +129,8 @@ starlight_v3::tspm::Model deserialize_tspm_model(BufferReader &reader) {
 	if (!reader.get(node_count)) {
 		throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (node count)");
 	}
-	// 防御: 每个节点固定28字节, 数量超界说明文件被篡改
-	if (node_count > static_cast<uint64_t>(reader.end - reader.ptr) / 28u) {
+	// 防御: 每个节点固定20字节(api_id+trans_start+trans_count各4字节+weight 8字节), 数量超界说明文件被篡改
+	if (node_count > static_cast<uint64_t>(reader.end - reader.ptr) / 20u) {
 		throw std::runtime_error("Model::load_from_file(): tosSPM section corrupted (node count exceeds remaining data)");
 	}
 	model.nodes.resize(static_cast<size_t>(node_count));
