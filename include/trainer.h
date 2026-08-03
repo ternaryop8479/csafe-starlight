@@ -22,8 +22,7 @@
 namespace starlight_v3 {
 
 /**
- * @brief 训练样本数据结构, 绑定一个EFG与其对应的PE文件路径
- * @details EFG用于tosSPM的训练与推理, 文件路径用于PE特征提取
+ * @brief 训练样本数据结构封装，包含提取完成的EFG及文件路径
  */
 struct TrainSample {
 	EFG efg; ///< 样本的EFG(外部调用流程图)
@@ -32,7 +31,6 @@ struct TrainSample {
 
 /**
  * @brief 最终训练配置结构体
- * @details 所有字段均无默认值, 使用前必须显式填满所有字段
  */
 struct TrainConfig {
 	tspm::TrainingConfig tspm_config; ///< tosSPM训练参数(见tspm/trainer.h中TrainingConfig的字段说明)
@@ -44,14 +42,7 @@ struct TrainConfig {
 };
 
 /**
- * @brief 最终训练器(编排层)
- * @details 职责为整个训练流程的编排:
- * 1. 将黑白数据集各自独立划分为cross_validation_k折;
- * 2. 每折使用其余折训练一个tosSPM模型(训练前剔除无边EFG), 并用它对当前折推理生成特征;
- * 3. 全部样本的特征向量合并后训练LightGBM模型;
- * 4. 使用全量数据(同样剔除无边EFG)训练最终的tosSPM模型;
- * 5. 将两个模型打包返回.
- * 注意: 交叉训练只剔除tosSPM训练数据中的无边EFG, 推理生成特征时对无边EFG正常推理.
+ * @brief 训练器封装
  */
 class Trainer {
 

@@ -18,7 +18,6 @@ namespace starlight_v3::lgbm {
 
 /**
  * @brief LightGBM训练配置结构体
- * @details 所有字段均无默认值, 使用前必须显式填满所有字段
  */
 struct LGBMConfig {
 	SIZE_T num_iterations; ///< 最大训练轮数, 值域[1, +∞)。每轮训练一棵树, 轮数越大拟合能力越强, 过大容易过拟合
@@ -37,8 +36,6 @@ struct LGBMConfig {
 
 /**
  * @brief LightGBM训练器
- * @details 职责范围仅限LightGBM模型本身: 输入特征矩阵与标签, 输出训练完成的LightGBM模型.
- * 不感知特征来源, 也不感知tosSPM等其他模块的存在.
  */
 class Trainer {
 
@@ -48,9 +45,6 @@ public:
 
 	/**
 	 * @brief 使用特征矩阵训练LightGBM二分类模型
-	 * @details 内部按validation_ratio分层划分验证集(使用random_seed洗牌), 训练过程中
-	 * 监控验证集binary_logloss, 早停触发或训练满num_iterations轮后, 以最佳迭代轮数
-	 * 保存模型返回. objective固定为binary(二分类), metric固定为binary_logloss.
 	 * @param feature_matrix 特征矩阵, 行主序(每行一个样本, ncols个特征), 调用方保证有效
 	 * @param nrows 样本行数, 值域[1, +∞)
 	 * @param ncols 特征维度数, 值域[1, +∞), 训练与推理时必须保持一致

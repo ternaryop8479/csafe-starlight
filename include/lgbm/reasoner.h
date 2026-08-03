@@ -18,9 +18,7 @@ namespace starlight_v3::lgbm {
 
 /**
  * @brief LightGBM推理器
- * @details 职责范围仅限LightGBM模型本身: 输入特征向量, 输出恶意概率.
- * 不感知特征来源, 也不感知tosSPM等其他模块的存在.
- * 该对象持有Booster句柄, 禁止拷贝; 多线程推理时请每个线程独立构造实例.
+ * @note 该对象持有Booster句柄, 禁止拷贝; 多线程推理时请每个线程独立构造实例.
  */
 class Reasoner {
 

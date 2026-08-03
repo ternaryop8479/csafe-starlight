@@ -20,8 +20,7 @@
 namespace starlight_v3 {
 
 /**
- * @brief 最终推理结果
- * @details 包含LightGBM的最终判定、tosSPM引擎的原始结果(含证据树)以及本次分析的全部特征
+ * @brief 对PE程序的推理结果封装
  */
 struct AnalysisResult {
 	double final_score; ///< 最终恶意概率, 值域[0, 1], 越接近1越可能为恶意(LightGBM二分类输出)
@@ -37,15 +36,10 @@ struct AnalysisResult {
 void extract_evidence_dot(const AnalysisResult &result, const std::string &filename);
 
 /**
- * @brief 最终推理器(编排层)
- * @details 职责为整个推理流程的编排:
- * 1. 使用tosSPM模型推理(记录证据树);
- * 2. 从推理结果与EFG/PE文件中提取171维特征;
- * 3. 使用LightGBM模型对特征向量打分, 输出最终恶意概率.
- * 该对象持有LightGBM Booster句柄且持有模型引用, 禁止拷贝;
- * 多线程推理时请每个线程独立构造实例.
- * @warning model的生命周期必须长于本对象(构造后不得销毁model),
- * 严禁以临时Model对象构造本类(如Reasoner(Model::load_from_file(...)))
+ * @brief 推理器封装
+ * @warning model的生命周期必须长于本对象(构造后不得销毁model)，
+ * 严禁以临时Model对象构造本类(如Reasoner(Model::load_from_file(...)))，
+ * 多线程推理时需要每个线程构造一个独立的Reasoner实例
  */
 class Reasoner {
 
@@ -79,7 +73,6 @@ public:
 	 * @brief 对指定PE文件进行分析(内部自动生成EFG)
 	 * @param file_path 目标程序PE文件的路径
 	 * @return 分析结果
-	 * @throw std::runtime_error EFG生成失败时抛出
 	 */
 	AnalysisResult analyze_file(const std::string &file_path);
 

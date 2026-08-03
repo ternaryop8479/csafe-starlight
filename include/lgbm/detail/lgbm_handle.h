@@ -20,7 +20,6 @@ namespace starlight_v3::lgbm::detail {
 /**
  * @brief 检查LightGBM C API的返回值，失败时抛出异常
  * @param ret LightGBM C API的返回值，0代表成功，-1代表失败
- * @throw std::runtime_error 调用失败时抛出，错误信息来自LGBM_GetLastError
  */
 inline void check_lgbm_status(int ret) {
 	if (ret != 0) {
@@ -30,7 +29,7 @@ inline void check_lgbm_status(int ret) {
 
 /**
  * @brief Booster句柄的RAII封装，析构时自动调用LGBM_BoosterFree释放
- * @details 该类不可拷贝(句柄是C指针不能共享所有权)，只可移动
+ * @note 该类不可拷贝(句柄是C指针不能共享所有权)，只可移动
  */
 struct BoosterHandleGuard {
 	BoosterHandle handle = nullptr; ///< 被管理的Booster句柄
@@ -62,7 +61,7 @@ struct BoosterHandleGuard {
 
 /**
  * @brief Dataset句柄的RAII封装，析构时自动调用LGBM_DatasetFree释放
- * @details 该类不可拷贝(句柄是C指针不能共享所有权)，只可移动
+ * @note 该类不可拷贝(句柄是C指针不能共享所有权)，只可移动
  */
 struct DatasetHandleGuard {
 	DatasetHandle handle = nullptr; ///< 被管理的Dataset句柄
