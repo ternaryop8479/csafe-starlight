@@ -80,7 +80,7 @@ endif()
 if(ZYDIS_INCLUDE_DIR AND ZYDIS_LIBRARY)
 	set(ZYDIS_FOUND_SYSTEM TRUE)
 elseif(CSAFE_FETCH_MISSING_DEPS)
-	message(STATUS "[csafe] Zydis 未安装, 尝试从源码下载构建...")
+	message(STATUS "[WARN] Zydis 未安装, 尝试从源码下载构建...")
 	FetchContent_Declare(zydis
 		GIT_REPOSITORY https://github.com/zyantific/zydis.git
 		GIT_TAG v4.1.0
@@ -90,7 +90,7 @@ elseif(CSAFE_FETCH_MISSING_DEPS)
 	FetchContent_MakeAvailable(zydis)
 	set(ZYDIS_TARGET Zydis)
 else()
-	message(FATAL_ERROR "[csafe] 未找到 Zydis, 请安装或启用 CSAFE_FETCH_MISSING_DEPS")
+	message(FATAL_ERROR "[ERROR] 未找到 Zydis, 请安装或启用 CSAFE_FETCH_MISSING_DEPS")
 endif()
 
 # ---- pe-parse ----
@@ -101,22 +101,20 @@ endif()
 if(PE_PARSE_INCLUDE_DIR AND PE_PARSE_LIBRARY)
 	set(PE_PARSE_FOUND_SYSTEM TRUE)
 elseif(CSAFE_FETCH_MISSING_DEPS)
-	message(STATUS "[csafe] pe-parse 未安装, 尝试从源码下载构建...")
+	message(STATUS "[WARN] pe-parse 未安装, 尝试从源码下载构建...")
 	FetchContent_Declare(peparse
 		GIT_REPOSITORY https://github.com/trailofbits/pe-parse.git
 		GIT_TAG v2.1.1
 		GIT_SHALLOW TRUE)
 	FetchContent_MakeAvailable(peparse)
-	set(PE_PARSE_TARGET peparse)
+	set(PE_PARSE_TARGET pe-parse)
 else()
-	message(FATAL_ERROR "[csafe] 未找到 pe-parse, 请安装或启用 CSAFE_FETCH_MISSING_DEPS")
+	message(FATAL_ERROR "[ERROR] 未找到 pe-parse, 请安装或启用 CSAFE_FETCH_MISSING_DEPS")
 endif()
 
 # ---- LightGBM ----
 if(UNIX)
 	find_path(LIGHTGBM_INCLUDE_DIR NAMES LightGBM/c_api.h)
-	# 注意: 系统可能以 lib_lightgbm.so 命名(find_library 对 NAMES 自动加 lib 前缀, 无法匹配),
-	# 因此先用 find_library 找常规名, 再回退 find_file 精确匹配 lib_lightgbm.so
 	find_library(LIGHTGBM_LIBRARY NAMES lightgbm)
 	if(NOT LIGHTGBM_LIBRARY)
 		find_file(LIGHTGBM_LIBRARY_SO NAMES lib_lightgbm.so lib_lightgbm.dylib PATHS /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64)
@@ -128,7 +126,7 @@ endif()
 if(LIGHTGBM_INCLUDE_DIR AND LIGHTGBM_LIBRARY)
 	set(LIGHTGBM_FOUND_SYSTEM TRUE)
 elseif(CSAFE_FETCH_MISSING_DEPS)
-	message(STATUS "[csafe] LightGBM 未安装, 尝试从源码下载构建...")
+	message(STATUS "[WARN] LightGBM 未安装, 尝试从源码下载构建...")
 	FetchContent_Declare(lightgbm
 		GIT_REPOSITORY https://github.com/microsoft/LightGBM.git
 		GIT_TAG v4.5.0
@@ -139,12 +137,11 @@ elseif(CSAFE_FETCH_MISSING_DEPS)
 	set(BUILD_PYTHON OFF CACHE BOOL "" FORCE)
 	set(BUILD_CLI OFF CACHE BOOL "" FORCE)
 	FetchContent_MakeAvailable(lightgbm)
-	set(LIGHTGBM_TARGET lib_lightgbm)
+	set(LIGHTGBM_TARGET _lightgbm)
 else()
-	message(FATAL_ERROR "[csafe] 未找到 LightGBM, 请安装或启用 CSAFE_FETCH_MISSING_DEPS")
+	message(FATAL_ERROR "[ERROR] 未找到 LightGBM, 请安装或启用 CSAFE_FETCH_MISSING_DEPS")
 endif()
 
-# 统一的外部依赖别名: 无论是系统库还是FetchContent源码构建, 引擎通过别名链接
 if(ZYDIS_FOUND_SYSTEM)
 	add_library(dep_zydis UNKNOWN IMPORTED)
 	set_target_properties(dep_zydis PROPERTIES
