@@ -38,9 +38,11 @@ option(CSAFE_ENABLE_NATIVE_TUNE "Release模式启用本机指令集优化" ON)
 
 # ---- 编译选项 ----
 # 注意: tspm/reasoner.h 中使用了 #pragma omp declare simd
-# 平台相关: GCC/Clang 用 -fopenmp-simd; MSVC 用 /openmp 的SIMD部分(msvc下pragma被忽略, 仅加优化标志)
+# 平台相关: GCC/Clang/MinGW 用 -fopenmp-simd; MSVC 用 /openmp 的SIMD部分(msvc下pragma被忽略, 仅加优化标志)
 # CMake 内置默认: Release=-O3 -DNDEBUG(MSVC为/Ob2 /O2), Debug=-g(MSVC为/Ob0 /Od), 这里只补充额外所需标志
 if(MSVC)
+	# MSVC: 源码含中文注释/日志, 必须用/utf-8设置源字符集与执行字符集为UTF-8, 否则中文乱码或编译告警
+	add_compile_options(/utf-8)
 	# MSVC: Debug默认已含/Od, Release默认已含/O2; 只需为Release补充开放MP
 	if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 		add_compile_options(/Ob0 /Od)
@@ -48,11 +50,14 @@ if(MSVC)
 		add_compile_options(/O2 /arch:AVX2)
 	endif()
 else()
+	# GCC/Clang/MinGW: 源码含中文注释/日志, 显式声明源字符集与执行字符集为UTF-8
+	add_compile_options(-finput-charset=utf-8 -fexec-charset=utf-8)
 	if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 		add_compile_options(-O0)
 	else()
 		add_compile_options(-fopenmp-simd)
-		if(CSAFE_ENABLE_NATIVE_TUNE)
+		if(CSAFE_ENABLE_NATIVE_TUNE AND NOT MINGW)
+			# -march=native在交叉编译(MinGW)下会用编译机的CPU特性生成目标, 与Windows目标机不匹配, 强制关闭
 			add_compile_options(-march=native)
 		endif()
 	endif()
@@ -108,6 +113,10 @@ elseif(CSAFE_FETCH_MISSING_DEPS)
 		GIT_SHALLOW TRUE)
 	FetchContent_MakeAvailable(peparse)
 	set(PE_PARSE_TARGET pe-parse)
+	if(MINGW)
+		# MinGW/gcc下wstring_convert等C++17废弃特性触发-Werror, 需要降级为警告而非错误
+		target_compile_options(pe-parse PRIVATE -Wno-error=deprecated-declarations)
+	endif()
 else()
 	message(FATAL_ERROR "[ERROR] 未找到 pe-parse, 请安装或启用 CSAFE_FETCH_MISSING_DEPS")
 endif()
@@ -139,6 +148,12 @@ elseif(CSAFE_FETCH_MISSING_DEPS)
 	FetchContent_MakeAvailable(lightgbm)
 	find_package(OpenMP)
 	set(LIGHTGBM_TARGET _lightgbm)
+	if(MINGW)
+		# LightGBM源码缺少<cstdint>显式包含(如json11.cpp), 在MinGW/gcc下编译失败.
+		# 通过强制预包含<cstdint>绕过, 无需修改第三方源码.
+		target_compile_options(lightgbm_objs PRIVATE -include cstdint)
+		target_compile_options(lightgbm_capi_objs PRIVATE -include cstdint)
+	endif()
 else()
 	message(FATAL_ERROR "[ERROR] 未找到 LightGBM, 请安装或启用 CSAFE_FETCH_MISSING_DEPS")
 endif()
@@ -210,6 +225,10 @@ target_link_libraries(starlight_v3_lib
 # ---- 命令行工具 ----
 add_executable(starlight_v3 src/starlight_v3.cpp)
 target_link_libraries(starlight_v3 PRIVATE starlight_v3_lib)
+if(MINGW)
+	# MinGW交叉编译: 静态链接C/C++运行时, 使扫描程序自包含(目标机无需安装MinGW运行时)
+	target_link_options(starlight_v3 PRIVATE -static -static-libgcc -static-libstdc++)
+endif()
 
 # ---- 安装规则(供服务端封装与模型训练发布使用) ----
 include(GNUInstallDirs)

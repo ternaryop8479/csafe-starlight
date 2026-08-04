@@ -8,10 +8,13 @@
 
 #include <algorithm>
 #include <atomic>
-#include <malloc.h>
 #include <numeric>
 #include <random>
 #include <thread>
+
+#ifdef __linux__ // glibc环境下使用malloc_trim(0)优化内存占用
+#include <malloc.h>
+#endif
 
 #include "external/BS_thread_pool.hpp"
 
@@ -188,7 +191,9 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 		thread_pool.wait();
 
 		// 归还碎片堆内存
+#ifdef __linux__
 		malloc_trim(0);
+#endif
 	}
 
 	// 使用全部特征向量训练LightGBM模型
@@ -197,7 +202,10 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 	}
 
 	// 归还碎片堆内存
+#ifdef __linux__
 	malloc_trim(0);
+#endif
+
 	log_callback("[Trainer::train()] Starting LightGBM training (" + std::to_string(total_samples) + " samples, " + std::to_string(lgbm::kTotalFeatDims) + " features)\n");
 	lgbm::Trainer lgbm_trainer;
 	lgbm::Model lgbm_model = lgbm_trainer.train(feature_matrix.data(), static_cast<int32_t>(total_samples), static_cast<int32_t>(lgbm::kTotalFeatDims), labels.data(), config.lgbm_config);
@@ -215,8 +223,11 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 	}
 	tspm::Trainer final_tspm_trainer(config.tspm_config, log_callback);
 	tspm::Model final_tspm_model = train_tspm_filtered(final_tspm_trainer, log_callback, std::move(all_mal), std::move(all_ben));
+
 	// 归还碎片堆内存
+#ifdef __linux__
 	malloc_trim(0);
+#endif
 
 	// 打包返回
 	log_callback("[Trainer::train()] Training complete\n");
