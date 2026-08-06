@@ -9,11 +9,12 @@
  * 按目标比例裁切(edgeless占总样本的比例), 随机抽取后拷贝到目标目录, 命名[MD5].[原后缀].
  *
  * 用法:
- *   dataset_filter <src_dir> <dst_dir> <edgeless_ratio> [thread_count]
+ *   dataset_filter <src_dir> <dst_dir> <edgeless_ratio> [thread_count] [max_samples]
  *     src_dir        源文件夹(递归)
  *     dst_dir        目标文件夹(不存在则创建)
  *     edgeless_ratio 目标edgeless占总样本比例, 取值[0,1], 如0.4表示40%样本为edgeless
  *     thread_count   并行线程数, 默认系统并发
+ *     max_samples    最大拷贝样本总数, 超出时按比例缩裁, 0或省略为不限制
  */
 
 #include <algorithm>
@@ -117,6 +118,17 @@ int main(int argc, char *argv[]) {
 	}
 	unsigned int hw = std::thread::hardware_concurrency();
 	thread_count = thread_count ? thread_count : (hw ? hw : 4);
+
+	// 最大拷贝样本总数, 0=不限制
+	size_t max_samples = 0;
+	if (argc >= 6) {
+		try {
+			max_samples = std::stoull(argv[5]);
+		} catch (const std::exception &) {
+			std::cerr << "[Error] max_samples参数非法: " << argv[5] << std::endl;
+			return -1;
+		}
+	}
 
 	if (!fs::is_directory(src_dir)) {
 		std::cerr << "[Error] 源文件夹不存在: " << src_dir << std::endl;
@@ -241,6 +253,25 @@ int main(int argc, char *argv[]) {
 		: 0.0;
 	std::cout << "[Info] 保留 edgeless=" << keep_edgeless << " 普通=" << keep_normal
 			  << " (实际比例=" << final_ratio << ")" << std::endl;
+
+	// 4.5 若超过最大样本数, 按当前edgeless占比等比例缩裁
+	size_t total_keep = keep_edgeless + keep_normal;
+	if (max_samples > 0 && total_keep > max_samples) {
+		// 按原占比缩放: 每类保留 round(该类 * max_samples / total_keep), 保证总数不超过max_samples
+		size_t scaled_edgeless = static_cast<size_t>(
+			static_cast<double>(keep_edgeless) * max_samples / total_keep + 0.5);
+		size_t scaled_normal = static_cast<size_t>(
+			static_cast<double>(keep_normal) * max_samples / total_keep + 0.5);
+		// 取整误差可能使总和超限, 多余去掉普通样本(普通样本相对充裕)
+		if (scaled_edgeless + scaled_normal > max_samples) {
+			scaled_normal = max_samples - scaled_edgeless;
+		}
+		keep_edgeless = scaled_edgeless;
+		keep_normal = scaled_normal;
+		std::cout << "[Info] 超过最大样本数 " << max_samples
+				  << ", 按比例缩裁后 edgeless=" << keep_edgeless
+				  << " 普通=" << keep_normal << std::endl;
+	}
 
 	// 5. 随机抽取并拷贝
 	//    使用固定种子保证可复现
