@@ -148,8 +148,7 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					FeatPack feats;
 					feats.efg_feats = lgbm::extract_efg_feats(sample.efg);
 					feats.tspm_feats = lgbm::extract_tspm_feats(result, sample.efg);
-					// 证据树在特征提取后立即释放(extract_tspm_feats为只读遍历, 提取完不再需要),
-					// 否则并行任务会同时驻留大量证据树导致内存爆炸
+					// 依旧好孩子要注意释放内存
 					result.evidence_trees.clear();
 					result.evidence_trees.shrink_to_fit();
 					feats.pe_feats = lgbm::extract_pe_feats(sample.file_path);
@@ -162,6 +161,9 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					++feature_fail_count;
 					log_callback("[Trainer::train()] Malware feature generation failed (row " + std::to_string(idx) + ", features will stay zero): " + sample.file_path + " -> unknown exception\n");
 				}
+#ifdef __linux__
+				malloc_trim(0); // 归还碎片堆内存
+#endif
 			});
 		}
 		for (size_t idx : ben_folds[static_cast<size_t>(fold)]) {
@@ -174,7 +176,7 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					FeatPack feats;
 					feats.efg_feats = lgbm::extract_efg_feats(sample.efg);
 					feats.tspm_feats = lgbm::extract_tspm_feats(result, sample.efg);
-					// 证据树在特征提取后立即释放(与恶意样本任务同理)
+					// 释放内存
 					result.evidence_trees.clear();
 					result.evidence_trees.shrink_to_fit();
 					feats.pe_feats = lgbm::extract_pe_feats(sample.file_path);
@@ -186,13 +188,15 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					++feature_fail_count;
 					log_callback("[Trainer::train()] Benign feature generation failed (row " + std::to_string(mal_count + idx) + ", features will stay zero): " + sample.file_path + " -> unknown exception\n");
 				}
+#ifdef __linux__
+				malloc_trim(0); // 归还碎片堆内存
+#endif
 			});
 		}
 		thread_pool.wait();
 
-		// 归还碎片堆内存
 #ifdef __linux__
-		malloc_trim(0);
+		malloc_trim(0); // 归还碎片堆内存
 #endif
 	}
 
@@ -201,9 +205,8 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 		log_callback("[Trainer::train()] WARNING: " + std::to_string(feature_fail_count.load()) + " samples failed feature generation, their features stay zero\n");
 	}
 
-	// 归还碎片堆内存
 #ifdef __linux__
-	malloc_trim(0);
+	malloc_trim(0); // 归还碎片堆内存
 #endif
 
 	log_callback("[Trainer::train()] Starting LightGBM training (" + std::to_string(total_samples) + " samples, " + std::to_string(lgbm::kTotalFeatDims) + " features)\n");
