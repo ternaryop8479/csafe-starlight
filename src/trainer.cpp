@@ -39,11 +39,7 @@ size_t drop_edgeless(std::vector<starlight_v3::EFG> &dataset) {
 	return before - dataset.size();
 }
 
-// 以值传递拷贝数据集后剔除无边EFG再执行tosSPM训练:
-// 之所以按值传递, 是因为train()训练完成后会清空数据集的api_table,
-//    拷贝可以保证调用方的原数据集不受影响;
-// 无边EFG(edges_为空, 典型如.NET程序)在每次训练前都被剔除, 防止干扰训练;
-// 剔除后数据集若为空则抛异常终止.
+// 以值传递拷贝数据集后剔除无边EFG并执行tosSPM训练(train()训练完成后会清空数据集，因此需要拷贝数据集而不是引用)
 starlight_v3::tspm::Model train_tspm_filtered(starlight_v3::tspm::Trainer &trainer, const std::function<void(const std::string &)> &log_callback, std::vector<starlight_v3::EFG> malware, std::vector<starlight_v3::EFG> benign) {
 	// 剔除无边EFG
 	size_t dropped_mal = drop_edgeless(malware);
@@ -60,13 +56,31 @@ starlight_v3::tspm::Model train_tspm_filtered(starlight_v3::tspm::Trainer &train
 	return trainer.train(malware, benign);
 }
 
-// 将[0, total)的下标洗牌后均分为k折:
-// 生成0..total-1的下标序列并整体洗牌;
-// 按下标对k取模轮流分配到各折, 余数会自然分到前几折.
-std::vector<std::vector<size_t>> split_folds(size_t total, starlight_v3::SIZE_T k, std::mt19937 &rng) {
-	std::vector<size_t> indices(total);
-	std::iota(indices.begin(), indices.end(), 0);
-	std::shuffle(indices.begin(), indices.end(), rng);
+// 将[0, total)的下标按"edgeless/普通"分层洗牌后均分为k折，确保每折交叉训练的时候样本分布均匀
+std::vector<std::vector<size_t>> split_folds(size_t total, starlight_v3::SIZE_T k, std::mt19937 &rng, const std::vector<starlight_v3::TrainSample> &samples) {
+	std::vector<size_t> edgeless_idx, normal_idx;
+	edgeless_idx.reserve(total);
+	normal_idx.reserve(total);
+	for (size_t i = 0; i < total; ++i) {
+		if (samples[i].efg.edges_.empty()) {
+			edgeless_idx.push_back(i);
+		} else {
+			normal_idx.push_back(i);
+		}
+	}
+	std::shuffle(edgeless_idx.begin(), edgeless_idx.end(), rng);
+	std::shuffle(normal_idx.begin(), normal_idx.end(), rng);
+
+	// 按比例交替合并: 以较小组为节奏, 均匀穿插两组下标, 使整体序列两类交错分布
+	std::vector<size_t> indices;
+	indices.reserve(total);
+	const size_t edgeless_n = edgeless_idx.size();
+	const size_t normal_n = normal_idx.size();
+	const size_t max_n = std::max(edgeless_n, normal_n);
+	for (size_t i = 0; i < max_n; ++i) {
+		if (i < edgeless_n) indices.push_back(edgeless_idx[i]);
+		if (i < normal_n) indices.push_back(normal_idx[i]);
+	}
 
 	std::vector<std::vector<size_t>> folds(static_cast<size_t>(k));
 	for (size_t i = 0; i < total; ++i) {
@@ -93,10 +107,10 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 	std::function<void(const std::string &)> log_callback = config.log_callback ? config.log_callback : [](const std::string &) {
 	};
 
-	// 黑白数据集各自独立划分k折
+	// 黑白数据集各自独立划分k折(按edgeless/普通分层打乱, 保证每折两类比例均匀)
 	std::mt19937 rng(config.random_seed);
-	std::vector<std::vector<size_t>> mal_folds = split_folds(malware_samples.size(), config.cross_validation_k, rng);
-	std::vector<std::vector<size_t>> ben_folds = split_folds(benign_samples.size(), config.cross_validation_k, rng);
+	std::vector<std::vector<size_t>> mal_folds = split_folds(malware_samples.size(), config.cross_validation_k, rng, malware_samples);
+	std::vector<std::vector<size_t>> ben_folds = split_folds(benign_samples.size(), config.cross_validation_k, rng, benign_samples);
 
 	// 分配特征矩阵与标签(行序: 先恶意样本再良性样本, 标签恶意=1良性=0)
 	const size_t mal_count = malware_samples.size();
