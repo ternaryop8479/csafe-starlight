@@ -28,8 +28,11 @@ PE 文件 ──► EFG 生成(反汇编控制流) ──► tosSPM 语义推理
 | [LightGBM](https://github.com/microsoft/LightGBM) | 梯度提升决策树训练/推理 | https://github.com/microsoft/LightGBM |
 | [xxHash](https://github.com/Cyan4973/xxHash) | 调用链哈希(内置 vendored) | https://github.com/Cyan4973/xxHash |
 | [BS::thread_pool](https://github.com/bshoshany/thread-pool) | 并行训练/推理(内置 vendored) | https://github.com/bshoshany/thread-pool |
+| [OpenSSL](https://www.openssl.org/) | 数据集筛选工具的文件 MD5 计算 | https://github.com/openssl/openssl |
 
 依赖策略：优先探测系统已安装的 Zydis/pe-parse/LightGBM(仅 UNIX)；缺失时若启用 `CSAFE_FETCH_MISSING_DEPS`(默认开启)则自动从源码下载构建。xxHash 与 BS::thread_pool 为内置 vendored 依赖，直接编译。
+
+> **OpenSSL**：编译器/工具链不预装(LLVM/MSVC/GCC/Clang/MinGW 均不内置)。仅构建 `dataset_filter` 时必需，需自行安装 `libssl-dev`(Linux) 或 vcpkg 安装 `openssl`(Windows)，引擎本体不依赖 OpenSSL。
 
 ## 编译方法
 
@@ -63,6 +66,7 @@ cmake --build build --config Release -j
 
 - `libstarlight_v3.a`：引擎静态库
 - `starlight_v3`：命令行工具
+- `dataset_filter`：数据集筛选工具(需 OpenSSL)
 
 安装(供服务端集成)：
 

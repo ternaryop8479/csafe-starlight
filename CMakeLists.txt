@@ -230,6 +230,13 @@ if(MINGW)
 	target_link_options(starlight_v3 PRIVATE -static -static-libgcc -static-libstdc++)
 endif()
 
+# ---- 数据集筛选工具 ----
+# 递归遍历文件夹, 初筛PE, 生成EFG标注edgeless, 按目标比例裁切并拷贝到目标目录([MD5].[原后缀])
+# 依赖OpenSSL(MD5计算, 大多数环境需自行安装, 见README Requirements)
+find_package(OpenSSL REQUIRED)
+add_executable(dataset_filter src/dataset_filter.cpp)
+target_link_libraries(dataset_filter PRIVATE starlight_v3_lib OpenSSL::Crypto)
+
 # ---- 安装规则(供服务端封装与模型训练发布使用) ----
 include(GNUInstallDirs)
 install(TARGETS starlight_v3_lib
