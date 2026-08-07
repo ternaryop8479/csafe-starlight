@@ -290,6 +290,12 @@ bool load_train_config(const std::string &config_path, starlight_v3::TrainConfig
 				else if (field == "early_stopping_rounds") config.lgbm_config.early_stopping_rounds = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
 				else if (field == "random_seed") config.lgbm_config.random_seed = static_cast<unsigned int>(std::stoul(value_str));
 				else if (field == "thread_count") config.lgbm_config.thread_count = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "is_unbalance") {
+					// 布尔值: 支持 1/0/true/false/on/off/yes/no
+					std::string v = value_str;
+					std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+					config.lgbm_config.is_unbalance = (v == "1" || v == "true" || v == "on" || v == "yes");
+				}
 				else {
 					std::cerr << "[Error] " << config_path << ":" << line_num << " 未知lgbm字段: " << field << std::endl;
 					return false;

@@ -29,6 +29,10 @@ static std::string build_lgbm_params(const LGBMConfig &config) {
 	params += "bagging_fraction=" + std::to_string(config.bagging_fraction) + " ";
 	params += "bagging_freq=" + std::to_string(config.bagging_freq) + " ";
 	params += "lambda_l2=" + std::to_string(config.lambda_l2) + " ";
+	// 类别不平衡时自动按反类样本比例加权, 避免多数类主导损失函数
+	if (config.is_unbalance) {
+		params += "is_unbalance=true ";
+	}
 	// 特征矩阵为稠密行主序数据, 强制按行构建直方图以提升训练速度
 	params += "force_row_wise=true ";
 	if (config.thread_count > 0) {

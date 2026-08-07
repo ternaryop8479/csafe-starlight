@@ -32,6 +32,7 @@ struct LGBMConfig {
 	SIZE_T early_stopping_rounds; ///< 早停轮数, 值域[0, +∞)。验证集分数连续多少轮无改善即停止训练, 0表示不早停。仅在validation_ratio > 0时生效
 	unsigned int random_seed; ///< 验证集划分的随机种子, 固定后可复现训练结果
 	SIZE_T thread_count; ///< LightGBM训练线程数, 值域[0, +∞)。0表示使用系统最大并发数
+	bool is_unbalance; ///< 类别不平衡处理, true时启用is_unbalance(自动按反类样本比例加权)。黑/白样本比例越悬殊(如4:1)越应开启, 接近1:1时开启无益
 };
 
 /**
