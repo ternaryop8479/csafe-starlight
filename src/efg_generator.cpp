@@ -39,7 +39,6 @@ constexpr SIZE_T STATE_LIMIT = 5000000;
 
 // PE导入函数信息，包含DLL名、函数名及IAT地址
 struct ImportInfo {
-	std::string dll_name_; ///< 导入函数所属的DLL名称
 	std::string func_name_; ///< 导入函数名(为空表示序号导入)
 	uint64_t iat_address_; ///< 导入函数在IAT(导入地址表)中的虚拟地址
 	uint64_t iat_rva_; ///< 导入函数在IAT中的相对虚拟地址(RVA)
@@ -99,7 +98,6 @@ int PEParser::Impl::import_callback(void *ctx, const peparse::VA &va,
 	const std::string &symbol) {
 	auto *impl = static_cast<Impl *>(ctx);
 	ImportInfo info;
-	info.dll_name_ = module; ///< 记录DLL名
 	info.func_name_ = symbol; ///< 记录函数名
 	info.iat_address_ = va; ///< 记录IAT中的虚拟地址
 	info.iat_rva_ = va - impl->image_base_; ///< 换算为RVA(供后续节段内查找)
@@ -284,7 +282,7 @@ EFGBuilder::Impl::Impl(const PEParser &parser)
 
 	// 建立IAT地址到导入名的双向映射(RVA与VA两种查法)
 	for (const auto &imp : parser_.get_imports()) {
-		const std::string name = imp.dll_name_ + "!" + imp.func_name_;
+		const std::string name = imp.func_name_;
 		iat_by_rva_[imp.iat_rva_] = name;
 		iat_by_va_[imp.iat_address_] = name;
 	}
@@ -619,7 +617,7 @@ EFG EFGBuilder::Impl::to_efg() {
 	constexpr uint64_t IMPORT_NODE_BASE = 0x100000000ULL;
 	std::unordered_set<std::string> added_unused_imports;
 	for (const auto &imp : parser_.get_imports()) {
-		const std::string name = imp.dll_name_ + "!" + imp.func_name_;
+		const std::string name = imp.func_name_;
 		// 已被调用过则无需添加
 		if (used_import_names.count(name) > 0) {
 			continue;
