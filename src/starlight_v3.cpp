@@ -251,52 +251,64 @@ bool load_train_config(const std::string &config_path, starlight_v3::TrainConfig
 		try {
 			if (key.rfind("tspm_config.", 0) == 0) {
 				const std::string field = key.substr(std::string("tspm_config.").size());
-				if (field == "preprune_factor") config.tspm_config.preprune_factor = std::stod(value_str);
-				else if (field == "max_root_support") config.tspm_config.max_root_support = std::stod(value_str);
-				else if (field == "max_expan_ratio") config.tspm_config.max_expan_ratio = std::stod(value_str);
-				else if (field == "thread_count") config.tspm_config.thread_count = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "min_support") config.tspm_config.min_support = std::stod(value_str);
-				else if (field == "max_skip") config.tspm_config.max_skip = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "max_length") config.tspm_config.max_length = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "max_depth") config.tspm_config.max_depth = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "min_distinction") config.tspm_config.min_distinction = std::stod(value_str);
-				else if (field == "banned_apis") {
-					config.tspm_config.banned_apis.clear();
-					std::stringstream ss(value_str);
-					std::string api;
-					while (std::getline(ss, api, ',')) {
-						size_t b = api.find_first_not_of(" \t");
-						size_t e = api.find_last_not_of(" \t");
-						if (b != std::string::npos && e != std::string::npos) {
-							config.tspm_config.banned_apis.insert(api.substr(b, e - b + 1));
-						}
-					}
-				}
+				if (field == "preprune_factor")
+					config.tspm_config.preprune_factor = std::stod(value_str);
+				else if (field == "max_root_support")
+					config.tspm_config.max_root_support = std::stod(value_str);
+				else if (field == "max_expan_ratio")
+					config.tspm_config.max_expan_ratio = std::stod(value_str);
+				else if (field == "thread_count")
+					config.tspm_config.thread_count = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "min_support")
+					config.tspm_config.min_support = std::stod(value_str);
+				else if (field == "max_skip")
+					config.tspm_config.max_skip = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "max_length")
+					config.tspm_config.max_length = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "max_depth")
+					config.tspm_config.max_depth = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "min_distinction")
+					config.tspm_config.min_distinction = std::stod(value_str);
+				else if (field == "noisy_api_min_benign_ratio")
+					config.tspm_config.noisy_api_min_benign_ratio = std::stod(value_str);
+				else if (field == "noisy_api_max_mal_over_ben")
+					config.tspm_config.noisy_api_max_mal_over_ben = std::stod(value_str);
 				else {
 					std::cerr << "[Error] " << config_path << ":" << line_num << " 未知tspm字段: " << field << std::endl;
 					return false;
 				}
 			} else if (key.rfind("lgbm_config.", 0) == 0) {
 				const std::string field = key.substr(std::string("lgbm_config.").size());
-				if (field == "num_iterations") config.lgbm_config.num_iterations = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "learning_rate") config.lgbm_config.learning_rate = std::stod(value_str);
-				else if (field == "num_leaves") config.lgbm_config.num_leaves = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "min_data_in_leaf") config.lgbm_config.min_data_in_leaf = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "feature_fraction") config.lgbm_config.feature_fraction = std::stod(value_str);
-				else if (field == "bagging_fraction") config.lgbm_config.bagging_fraction = std::stod(value_str);
-				else if (field == "bagging_freq") config.lgbm_config.bagging_freq = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "lambda_l2") config.lgbm_config.lambda_l2 = std::stod(value_str);
-				else if (field == "validation_ratio") config.lgbm_config.validation_ratio = std::stod(value_str);
-				else if (field == "early_stopping_rounds") config.lgbm_config.early_stopping_rounds = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "random_seed") config.lgbm_config.random_seed = static_cast<unsigned int>(std::stoul(value_str));
-				else if (field == "thread_count") config.lgbm_config.thread_count = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				if (field == "num_iterations")
+					config.lgbm_config.num_iterations = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "learning_rate")
+					config.lgbm_config.learning_rate = std::stod(value_str);
+				else if (field == "num_leaves")
+					config.lgbm_config.num_leaves = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "min_data_in_leaf")
+					config.lgbm_config.min_data_in_leaf = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "feature_fraction")
+					config.lgbm_config.feature_fraction = std::stod(value_str);
+				else if (field == "bagging_fraction")
+					config.lgbm_config.bagging_fraction = std::stod(value_str);
+				else if (field == "bagging_freq")
+					config.lgbm_config.bagging_freq = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "lambda_l2")
+					config.lgbm_config.lambda_l2 = std::stod(value_str);
+				else if (field == "validation_ratio")
+					config.lgbm_config.validation_ratio = std::stod(value_str);
+				else if (field == "early_stopping_rounds")
+					config.lgbm_config.early_stopping_rounds = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				else if (field == "random_seed")
+					config.lgbm_config.random_seed = static_cast<unsigned int>(std::stoul(value_str));
+				else if (field == "thread_count")
+					config.lgbm_config.thread_count = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
 				else if (field == "is_unbalance") {
 					// 布尔值: 支持 1/0/true/false/on/off/yes/no
 					std::string v = value_str;
 					std::transform(v.begin(), v.end(), v.begin(), ::tolower);
 					config.lgbm_config.is_unbalance = (v == "1" || v == "true" || v == "on" || v == "yes");
-				}
-				else {
+				} else {
 					std::cerr << "[Error] " << config_path << ":" << line_num << " 未知lgbm字段: " << field << std::endl;
 					return false;
 				}

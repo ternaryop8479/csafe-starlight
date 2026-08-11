@@ -61,7 +61,9 @@ struct TrainingConfig {
 	double max_expan_ratio; ///< 最大膨胀率，可用于剪枝分裂出的组合数较多(远高于其本身支持度)的API
 	double min_distinction; ///< 剪枝时的黑白样本最小区分度，取值[0.0, 1.0]，越大剪枝越激进
 	double preprune_factor; ///< 提前剪枝因数，用于限制BFS过程中由于max_skip过大导致的组合爆炸(越小剪枝越严格，模型精度越低，建议不小于1.0)
-	std::unordered_set<std::string> banned_apis; ///< 用于标记被禁止的噪声API，即不允许出现在数据库中的API黑名单
+	// 噪声api标记参数(两参数有任意参数为0则代表禁用噪声api自动标记模块)
+	double noisy_api_min_benign_ratio; ///< 噪声api最低良性出现率，即当某一个病毒api满足其在良性数据集中的支持度小于该比率时，其就不会被判定为噪声api
+	double noisy_api_max_mal_over_ben; ///< 噪声api最大恶意-良性比，即当某一个病毒api满足其在病毒数据集中的支持度与良性数据集中的支持度之比大于该值时，其就不会被判定为噪声api
 
 	/**
 	 * @brief 最大支持度，取值[0.0, 1.0]

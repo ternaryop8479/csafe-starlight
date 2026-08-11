@@ -131,12 +131,29 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 		}
 	}
 
-	// 根据用户输入配置里用字符串存储的banned_apis生成banned_apis_成员变量(存储API ID)
-	for (const std::string &api : config_.banned_apis) {
-		banned_apis_.insert(model.api_table.query_id(api).second);
+	banned_apis_.clear(); // 清除banned_apis_表，防止干扰训练
+
+	// 自动计算噪声api集合
+	if (!near_zero(config_.noisy_api_max_mal_over_ben) && !near_zero(config_.noisy_api_min_benign_ratio)) {
+		const std::vector<std::string> &api_set = model.api_table.get_table(); // 获取api表的字符串形式
+		for (const std::string &api : api_set) { // 遍历所有API
+			// 查询当前API的API ID
+			auto [is_api_exist, api_id] = model.api_table.query_id(api);
+			if (!is_api_exist) { // API不存在，虽然不太可能但是还是写上吧
+				continue;
+			}
+			// 分别计算API的黑白支持度
+			double malsupport = static_cast<double>(malware_api_weight.size() > api_id ? malware_api_weight[api_id] : 0.0) / static_cast<double>(malware_dataset.size());
+			double bensupport = static_cast<double>(benign_api_weight.size() > api_id ? benign_api_weight[api_id] : 0.0) / static_cast<double>(benign_dataset.size());
+
+			// 仅当两个条件同时满足时将其加入banlist
+			if (bensupport >= config_.noisy_api_min_benign_ratio && malsupport / bensupport <= config_.noisy_api_max_mal_over_ben) {
+				banned_apis_.insert(api_id);
+			}
+		}
 	}
 
-	// 忽略掉不存在于解析列表中的API
+	// 忽略掉不存在于解析列表中的API(具体是不是冗余逻辑我已经忘了，但是占不了多少时间，跑一下满足洁癖)
 	if (banned_apis_.count(INVALID_NUM)) {
 		banned_apis_.erase(INVALID_NUM);
 	}
