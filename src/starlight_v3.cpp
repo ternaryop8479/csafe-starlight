@@ -35,6 +35,7 @@
 #include "efg_generator.h"
 #include "model.h"
 #include "reasoner.h"
+#include "external/BS_thread_pool.hpp"
 #include "trainer.h"
 
 namespace fs = std::filesystem;
@@ -395,9 +396,24 @@ int run_train(const std::string &malware_folder, const std::string &benign_folde
 	return 0;
 }
 
-// 打印单行推理结果: 按最终分数打上[MALWARE]/[BENIGN]前缀, 附文件路径与黑白权重
-void print_infer_result(const fs::path &path, const starlight_v3::AnalysisResult &result) {
-	std::cout << (result.final_score > kMalwareThreshold ? "[MALWARE] " : "[BENIGN ] ")
+// 打印单行推理结果: 按最终分数打上[MALWARE]/[BENIGN]/[SUSPICIOUS]前缀, 附文件路径与黑白权重
+// 三分类阈值: low_th/high_th 同时>0时启用(score>=high_th=病毒, score<low_th=安全, 中间=可疑);
+// 未启用三分类时保持二分类(kMalwareThreshold判定).
+void print_infer_result(const fs::path &path, const starlight_v3::AnalysisResult &result, double low_th = 0.0, double high_th = 0.0) {
+	std::string verdict;
+	if (low_th > 0.0 && high_th > 0.0) {
+		// 三分类: 上阈值以上病毒, 下阈值以下安全, 中间可疑
+		if (result.final_score >= high_th)
+			verdict = "[MALWARE]";
+		else if (result.final_score < low_th)
+			verdict = "[BENIGN ]";
+		else
+			verdict = "[SUSPICIOUS]";
+	} else {
+		// 二分类: 默认阈值0.5
+		verdict = (result.final_score > kMalwareThreshold ? "[MALWARE] " : "[BENIGN ] ");
+	}
+	std::cout << verdict << " "
 			  << path.string()
 			  << " score=" << result.final_score
 			  << " (malscore=" << result.tspm_result.malware_score
@@ -490,7 +506,7 @@ int run_score(const std::string &model_path, const std::string &malware_folder, 
 // 校验路径存在且为普通文件;
 // 调用reasoner.analyze_file执行推理并打印结果;
 // 推理异常打印错误并返回1. 返回0表示推理成功(含判定为良性).
-int infer_single_file(starlight_v3::Reasoner &reasoner, const fs::path &file_path) {
+int infer_single_file(starlight_v3::Reasoner &reasoner, const fs::path &file_path, double low_th = 0.0, double high_th = 0.0) {
 	if (!fs::exists(file_path)) {
 		std::cerr << "[Error] 文件不存在: " << file_path << std::endl;
 		return 1;
@@ -502,7 +518,7 @@ int infer_single_file(starlight_v3::Reasoner &reasoner, const fs::path &file_pat
 
 	try {
 		starlight_v3::AnalysisResult result = reasoner.analyze_file(file_path.string());
-		print_infer_result(file_path, result);
+		print_infer_result(file_path, result, low_th, high_th);
 		return 0;
 	} catch (const std::exception &e) {
 		std::cerr << "[Error] 推理失败 " << file_path << ": " << e.what() << std::endl;
@@ -512,9 +528,11 @@ int infer_single_file(starlight_v3::Reasoner &reasoner, const fs::path &file_pat
 
 // 推理模式: 对文件夹内所有文件递归推理判定:
 // 递归收集常规文件(受max_samples上限约束), 不预设扩展名过滤, 交予generate_efg自行判断是否PE;
-// 逐文件推理, 按最终分数累计恶意/良性计数, 异常计入失败数;
+// 使用线程池并行推理(每个任务独立构造Reasoner, 满足多线程推理约束, threads=0自动取硬件并发数);
+// 三分类阈值(均>0时启用): score>=high_th=恶意, score<low_th=良性, 中间=suspicious;
+// 按最终分数累计恶意/良性/可疑/失败计数, 异常计入失败数;
 // 输出推理汇总. 返回0成功, 非0失败.
-int infer_folder(starlight_v3::Reasoner &reasoner, const fs::path &folder_path, size_t max_samples) {
+int infer_folder(const starlight_v3::Model &model, const fs::path &folder_path, size_t max_samples, size_t threads = 0, double low_th = 0.0, double high_th = 0.0) {
 	std::vector<fs::path> file_paths;
 	try {
 		for (auto &entry : fs::recursive_directory_iterator(folder_path, fs::directory_options::skip_permission_denied)) {
@@ -534,31 +552,65 @@ int infer_folder(starlight_v3::Reasoner &reasoner, const fs::path &folder_path, 
 		return -1;
 	}
 
-	size_t malware_count = 0;
-	size_t benign_count = 0;
-	size_t failed_count = 0;
-	std::cout << "[Info] 正在推理 " << file_paths.size() << " 个文件..." << std::endl;
-	for (const fs::path &p : file_paths) {
+	std::atomic<size_t> malware_count{0};
+	std::atomic<size_t> benign_count{0};
+	std::atomic<size_t> suspicious_count{0};
+	std::atomic<size_t> failed_count{0};
+	std::mutex cout_mutex; // 保护std::cout并发输出
+
+	// 是否启用三分类
+	const bool tri_class = (low_th > 0.0 && high_th > 0.0);
+	std::cout << "[Info] 正在推理 " << file_paths.size() << " 个文件(多线程, " << (threads ? std::to_string(threads) : std::string("自动")) << "线程)..."
+			  << (tri_class ? " 三分类阈值 low=" + std::to_string(low_th) + " high=" + std::to_string(high_th) : "") << std::endl;
+
+	// 线程池: 每个任务独立构造Reasoner, 结果按最终分数累计
+	BS::thread_pool thread_pool(threads ? threads : std::thread::hardware_concurrency());
+	thread_pool.detach_loop((size_t)0, file_paths.size(), [&](size_t i) {
+		const fs::path &p = file_paths[i];
 		try {
+			starlight_v3::Reasoner reasoner(model);
 			starlight_v3::AnalysisResult result = reasoner.analyze_file(p.string());
-			print_infer_result(p, result);
-			if (result.final_score > kMalwareThreshold) {
-				++malware_count;
+			{
+				std::lock_guard<std::mutex> lock(cout_mutex);
+				print_infer_result(p, result, low_th, high_th);
+			}
+			if (tri_class) {
+				if (result.final_score >= high_th) {
+					++malware_count;
+				} else if (result.final_score < low_th) {
+					++benign_count;
+				} else {
+					++suspicious_count;
+				}
 			} else {
-				++benign_count;
+				if (result.final_score > kMalwareThreshold) {
+					++malware_count;
+				} else {
+					++benign_count;
+				}
 			}
 		} catch (const std::exception &e) {
 			++failed_count;
+			std::lock_guard<std::mutex> lock(cout_mutex);
 			std::cerr << "[Error] 推理失败 " << p << ": " << e.what() << std::endl;
 		}
-	}
+	});
+	thread_pool.wait();
 
 	// 汇总
 	std::cout << "\n[Info] 推理汇总:" << std::endl;
-	std::cout << "总数: " << file_paths.size()
-			  << ", 恶意: " << malware_count
-			  << ", 良性: " << benign_count
-			  << ", 失败: " << failed_count << std::endl;
+	if (tri_class) {
+		std::cout << "总数: " << file_paths.size()
+				  << ", 恶意: " << malware_count.load()
+				  << ", 良性: " << benign_count.load()
+				  << ", 可疑: " << suspicious_count.load()
+				  << ", 失败: " << failed_count.load() << std::endl;
+	} else {
+		std::cout << "总数: " << file_paths.size()
+				  << ", 恶意: " << malware_count.load()
+				  << ", 良性: " << benign_count.load()
+				  << ", 失败: " << failed_count.load() << std::endl;
+	}
 	return 0;
 }
 
@@ -569,7 +621,7 @@ void print_usage(const char *program_name) {
 	std::cout << "Usage:" << std::endl;
 	std::cout << "  " << program_name << " train <malware_dir> <benign_dir> <model_path> <config_path> [max_train_samples] [version]" << std::endl;
 	std::cout << "  " << program_name << " score <model_path> <malware_dir> <benign_dir> [max_score_samples]" << std::endl;
-	std::cout << "  " << program_name << " infer <model_path> <target> [max_samples]" << std::endl;
+	std::cout << "  " << program_name << " infer <model_path> <target> [max_samples] [threads] [low_th] [high_th]" << std::endl;
 	std::cout << std::endl;
 	std::cout << "Subcommands:" << std::endl;
 	std::cout << "  train   训练模型: 交叉训练生成特征 -> LightGBM -> 最终tosSPM全量训练, 保存到model_path" << std::endl;
@@ -577,6 +629,9 @@ void print_usage(const char *program_name) {
 	std::cout << "          [version] 可选: 模型版本号(YY.MM.DD形式, 如 26.08.03), 作为病毒库日期标记" << std::endl;
 	std::cout << "  score   跑分: 对黑白样本文件夹分别打分, 输出平均分与判定准确率(用于模型评估)" << std::endl;
 	std::cout << "  infer   推理判定: 对单个PE文件或文件夹(递归)执行恶意/良性判定" << std::endl;
+	std::cout << "          [threads] 可选: 文件夹推理线程数(0=自动取硬件并发数)" << std::endl;
+	std::cout << "          [low_th] [high_th] 可选: 三分类阈值, 均>0时启用(score>=high_th=病毒, score<low_th=安全, 中间=可疑)" << std::endl;
+	std::cout << "          未指定阈值时保持二分类(默认0.5)" << std::endl;
 	std::cout << std::endl;
 	std::cout << "  --version  输出版本信息" << std::endl;
 	std::cout << "  -h, --help 显示本帮助" << std::endl;
@@ -649,6 +704,9 @@ int main(int argc, char *argv[]) {
 			return -1;
 		}
 		size_t max_samples = parse_size_arg(argc >= 5 ? argv[4] : nullptr, 200, "max_samples");
+		size_t threads = parse_size_arg(argc >= 6 ? argv[5] : nullptr, 0, "threads");
+		double low_th = argc >= 7 ? std::stod(argv[6]) : 0.0;
+		double high_th = argc >= 8 ? std::stod(argv[7]) : 0.0;
 
 		// 加载模型
 		std::cout << "[Info] 正在加载模型..." << std::endl;
@@ -665,9 +723,9 @@ int main(int argc, char *argv[]) {
 			return -1;
 		}
 		if (fs::is_directory(target)) {
-			return infer_folder(reasoner, target, max_samples);
+			return infer_folder(model, target, max_samples, threads, low_th, high_th);
 		}
-		return infer_single_file(reasoner, target);
+		return infer_single_file(reasoner, target, low_th, high_th);
 	}
 
 	std::cerr << "[Error] 未知子命令: " << mode << std::endl;
