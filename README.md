@@ -104,9 +104,9 @@ starlight_v3 infer <model_path> <target> [max_samples]
 
 ## 接口文档
 
-引擎静态库(模型序列化、Reasoner 推理、Trainer 训练、特征提取)的详细接口文档见：<接口文档链接待补充>
+这么简单的项目，自己读include/不就好了（bushi）
 
-命令行工具的完整用法见上文「命令行接口」一节。
+但是我的头文件注释和使用说明真的写的很全！不信你读一读（
 
 ## AI 使用声明
 
