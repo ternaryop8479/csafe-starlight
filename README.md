@@ -2,7 +2,7 @@
 
 基于 tosSPM 语义分析引擎 + LightGBM 集成学习的 Windows PE 恶意样本检测引擎。
 
-该引擎从 PE 文件中提取外部调用流程图(EFG)，通过 tosSPM 引擎挖掘 API 调用链并构建 Trie 树模型，融合 171 维静态特征与 LightGBM 二分类打分，最终输出样本的恶意概率与可解释的证据树。
+该引擎从 PE 文件中提取外部调用流程图(EFG)，通过基于 [tosSpan 有向图频繁调用链挖掘算法](https://blog.ternaryop.top/archives/BcOfhQzF)的 tosSPM 引擎挖掘 API 调用链并构建 Trie 树模型，融合 171 维静态特征与 LightGBM 二分类打分，最终输出样本的恶意概率与可解释的证据树。
 
 项目当前已集成进 [CFTQ 查杀云](https://cftq-cloud.nanoera.top/) 并保持云端病毒库实时更新。
 
