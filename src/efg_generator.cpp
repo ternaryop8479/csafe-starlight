@@ -252,6 +252,8 @@ struct EFGBuilder::Impl {
 		const ZydisDecodedOperand *op_buf,
 		uint64_t &target_rva, bool &is_import,
 		std::string &imp_name); ///< 解析调用/跳转目标(含IAT导入识别)
+	const CodeSection *find_section(uint64_t rva,
+		size_t &out_offset) const; ///< 定位rva所在可执行段(未命中返回nullptr)
 	bool decode_at(uint64_t rva, ZydisDecodedInstruction &instr,
 		ZydisDecodedOperand *operands); ///< 在可执行段内解码rva处指令
 	bool is_executable_rva(uint64_t rva); ///< 判断rva是否落在可执行段内
@@ -515,36 +517,43 @@ bool EFGBuilder::Impl::get_call_target(
 	return false;
 }
 
+const CodeSection *EFGBuilder::Impl::find_section(
+	uint64_t rva, size_t &out_offset) const {
+	// 在可执行段中定位rva, 命中返回段指针与段内偏移
+	for (const auto &sec : parser_.get_exec_sections()) {
+		if (rva >= sec.base_rva_ && rva < sec.base_rva_ + sec.size_) {
+			out_offset = static_cast<size_t>(rva - sec.base_rva_);
+			return &sec;
+		}
+	}
+	return nullptr;
+}
+
 bool EFGBuilder::Impl::decode_at(
 	uint64_t rva,
 	ZydisDecodedInstruction &instr,
 	ZydisDecodedOperand *operands) {
-	// 在可执行段中定位rva, 找到所在段后偏移解码
-	for (const auto &sec : parser_.get_exec_sections()) {
-		if (rva >= sec.base_rva_ && rva < sec.base_rva_ + sec.size_) {
-			size_t offset = rva - sec.base_rva_;
-			// VirtualSize > SizeOfRawData 的节段(虚拟填充/.bss/截断文件)可能没有原始字节,
-			// 此时 data()+offset 越过缓冲区、size()-offset 下溢, 必须拒绝
-			if (offset >= sec.bytes_.size()) {
-				return false;
-			}
-			return ZYAN_SUCCESS(ZydisDecoderDecodeFull(
-				&decoder_,
-				sec.bytes_.data() + offset,
-				sec.bytes_.size() - offset,
-				&instr, operands));
-		}
+	size_t offset = 0;
+	const CodeSection *sec = find_section(rva, offset);
+	if (!sec) {
+		return false;
 	}
-	return false;
+	// VirtualSize > SizeOfRawData 的节段(虚拟填充/.bss/截断文件)可能没有原始字节,
+	// 此时 data()+offset 越过缓冲区、size()-offset 下溢, 必须拒绝
+	if (offset >= sec->bytes_.size()) {
+		return false;
+	}
+	return ZYAN_SUCCESS(ZydisDecoderDecodeFull(
+		&decoder_,
+		sec->bytes_.data() + offset,
+		sec->bytes_.size() - offset,
+		&instr, operands));
 }
 
 bool EFGBuilder::Impl::is_executable_rva(uint64_t rva) {
-	// 判断rva是否落在任一可执行段范围内
-	for (const auto &sec : parser_.get_exec_sections()) {
-		if (rva >= sec.base_rva_ && rva < sec.base_rva_ + sec.size_)
-			return true;
-	}
-	return false;
+	// 判断rva是否落在任一可执行段范围内(与decode_at共用单次段定位)
+	size_t offset = 0;
+	return find_section(rva, offset) != nullptr;
 }
 
 void EFGBuilder::Impl::preprocess_thunks(
