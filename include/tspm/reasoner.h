@@ -68,7 +68,6 @@ private:
 		double black_weight = 0.0; ///< 黑权重
 		double white_weight = 0.0; ///< 白权重
 
-#pragma omp declare simd // 该SIMD优化应用于+=运算符重载函数
 		/**
 		 * @brief 权重+=运算符重载
 		 * @return 返回经过加法后的当前对象
