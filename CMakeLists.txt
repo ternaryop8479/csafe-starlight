@@ -63,6 +63,17 @@ else()
 	endif()
 endif()
 
+# ---- Release模式启用链接期优化(LTO) ----
+# GCC/Clang: 全局开启LTO, 静态库各翻译单元与可执行在链接期统一做跨单元内联/常量折叠
+if(NOT MSVC AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+	include(CheckIPOSupported)
+	check_ipo_supported(RESULT _ipo_supported)
+	if(_ipo_supported)
+		set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+		message(STATUS "[Info] LTO已启用")
+	endif()
+endif()
+
 # ---- 线程 ----
 find_package(Threads REQUIRED)
 
