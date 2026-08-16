@@ -258,7 +258,10 @@ struct EFGBuilder::Impl {
 	const CodeSection *find_section(uint64_t rva,
 		size_t &out_offset) const; ///< 定位rva所在可执行段(未命中返回nullptr)
 	bool decode_at(uint64_t rva, ZydisDecodedInstruction &instr,
-		ZydisDecodedOperand *operands); ///< 在可执行段内解码rva处指令
+		ZydisDecoderContext &context); ///< 在可执行段内解码rva处指令头(不含操作数)
+	bool decode_operands(const ZydisDecodedInstruction &instr,
+		const ZydisDecoderContext &context,
+		ZydisDecodedOperand *operands); ///< 解码指令操作数(需与指令头共用context)
 	bool is_executable_rva(uint64_t rva); ///< 判断rva是否落在可执行段内
 	void preprocess_thunks(const std::vector<uint8_t> &code,
 		uint64_t code_base); ///< 预扫描识别"jmp [IAT]"thunk跳板
@@ -319,57 +322,67 @@ void EFGBuilder::Impl::build_global_efg() {
 
 	SIZE_T i = 0;
 	while (!worklist.empty() && i++ < STATE_LIMIT) { // 状态上限防御(见STATE_LIMIT说明)
-		State state = std::move(worklist.front());
+		State state = worklist.front();
 		worklist.pop();
 
-		uint64_t rva = state.rva;
-		uint64_t prev_api = state.prev_api;
+		const uint64_t rva = state.rva;
+		const uint64_t prev_api = state.prev_api;
 
 		// 该(rva, prev_api)组合已处理过则跳过
 		if (!visited_states.insert(
 				(static_cast<GREAT_SIZE_T>(rva) << 32) | prev_api).second)
 			continue;
 
-		// RVA不在任何可执行段内则跳过
-		if (!is_executable_rva(rva))
-			continue;
-
-		// 反汇编当前指令
+		// 仅解码指令头(不含操作数), context为后续按需解操作数保留
 		ZydisDecodedInstruction instr {};
-		ZydisDecodedOperand op_buf[ZYDIS_MAX_OPERAND_COUNT];
-		if (!decode_at(rva, instr, op_buf))
+		ZydisDecoderContext context {};
+		if (!decode_at(rva, instr, context))
 			continue;
 
 		uint64_t next_rva = rva + instr.length; // 顺序下一条指令
+		const ZydisInstructionCategory category = instr.meta.category;
+
+		// 仅分支/调用类指令才需要解码操作数(普通指令占绝大多数, 可省去操作数解码开销)
+		const bool is_branch_or_call = (category == ZYDIS_CATEGORY_CALL) ||
+			(category == ZYDIS_CATEGORY_UNCOND_BR) ||
+			(category == ZYDIS_CATEGORY_COND_BR);
+		ZydisDecodedOperand op_buf[ZYDIS_MAX_OPERAND_COUNT];
 		uint64_t target_rva = 0;
 		bool is_import = false;
 		std::string imp_name;
-		// 解析指令的调用/跳转目标(含是否命中IAT导入)
-		bool has_target = get_call_target(rva, instr, op_buf,
-			target_rva, is_import, imp_name);
+		bool has_target = false;
+		if (is_branch_or_call && decode_operands(instr, context, op_buf)) {
+			// 解析指令的调用/跳转目标(含是否命中IAT导入)
+			has_target = get_call_target(rva, instr, op_buf,
+				target_rva, is_import, imp_name);
+		}
 
 		// 情形1: 直接调用导入函数 -> 建立"prev_api -> 该导入"节点与边, 并沿顺序流继续
-		if (instr.meta.category == ZYDIS_CATEGORY_CALL && is_import) {
+		if (category == ZYDIS_CATEGORY_CALL && is_import) {
 			api_nodes_[rva] = { rva, imp_name, false };
 			add_or_update_edge(prev_api, rva, state.jumps);
 			worklist.push({ next_rva, rva, {} });
 			continue;
 		}
 
-		// 情形2: 调用代码内部目标(非导入) -> 同时追踪调用目标与顺序流, 共享prev_api与跳跃记录
-		if (instr.meta.category == ZYDIS_CATEGORY_CALL && has_target && is_executable_rva(target_rva)) {
-			worklist.push({ target_rva, prev_api, state.jumps });
-			worklist.push({ next_rva, prev_api, std::move(state.jumps) });
+		// 情形2: 调用代码内部目标(非导入) -> 同时追踪调用目标与顺序流, 共享prev_api与跳跃统计
+		if (category == ZYDIS_CATEGORY_CALL) {
+			if (has_target && is_executable_rva(target_rva)) {
+				worklist.push({ target_rva, prev_api, state.jumps });
+				worklist.push({ next_rva, prev_api, std::move(state.jumps) });
+			} else {
+				worklist.push({ next_rva, prev_api, std::move(state.jumps) });
+			}
 			continue;
 		}
 
 		// 情形3: 函数返回 -> 结束当前追踪分支
-		if (instr.meta.category == ZYDIS_CATEGORY_RET) {
+		if (category == ZYDIS_CATEGORY_RET) {
 			continue;
 		}
 
 		// 情形4: 无条件跳转 -> 记录跳跃(若目标可执行则追踪目标), 不再追踪顺序流
-		if (instr.meta.category == ZYDIS_CATEGORY_UNCOND_BR) {
+		if (category == ZYDIS_CATEGORY_UNCOND_BR) {
 			if (has_target && is_executable_rva(target_rva)) {
 				record_jump(state.jumps, rva, target_rva, instr, op_buf);
 				worklist.push({ target_rva, prev_api, std::move(state.jumps) });
@@ -378,7 +391,7 @@ void EFGBuilder::Impl::build_global_efg() {
 		}
 
 		// 情形5: 条件跳转 -> 跳跃统计需保留副本(两分支共用), 同时追踪目标与顺序流
-		if (instr.meta.category == ZYDIS_CATEGORY_COND_BR) {
+		if (category == ZYDIS_CATEGORY_COND_BR) {
 			if (has_target && is_executable_rva(target_rva)) {
 				JumpStats jumps_copy = state.jumps; // 拷贝一份给跳转分支
 				record_jump(jumps_copy, rva, target_rva, instr, op_buf);
@@ -391,6 +404,11 @@ void EFGBuilder::Impl::build_global_efg() {
 		// 其他普通指令 -> 沿顺序流继续
 		worklist.push({ next_rva, prev_api, std::move(state.jumps) });
 	}
+}
+
+uint64_t EFGBuilder::Impl::edge_key(uint64_t from, uint64_t to) {
+	// 源与目标RVA均小于2^32(ENTRY哨兵0xFFFFFFFF亦合法)，可直接打包
+	return (from << 32) | to;
 }
 
 void EFGBuilder::Impl::record_jump(JumpStats &stats, uint64_t rva,
@@ -419,11 +437,6 @@ void EFGBuilder::Impl::record_jump(JumpStats &stats, uint64_t rva,
 		static_cast<int64_t>(rva));
 	stats.sum_span += span;
 	stats.sum_sq_span += span * span;
-}
-
-uint64_t EFGBuilder::Impl::edge_key(uint64_t from, uint64_t to) {
-	// 源与目标RVA均小于2^32(ENTRY哨兵0xFFFFFFFF亦合法)，可直接打包
-	return (from << 32) | to;
 }
 
 void EFGBuilder::Impl::add_or_update_edge(
@@ -513,7 +526,7 @@ const CodeSection *EFGBuilder::Impl::find_section(
 bool EFGBuilder::Impl::decode_at(
 	uint64_t rva,
 	ZydisDecodedInstruction &instr,
-	ZydisDecodedOperand *operands) {
+	ZydisDecoderContext &context) {
 	size_t offset = 0;
 	const CodeSection *sec = find_section(rva, offset);
 	if (!sec) {
@@ -524,11 +537,22 @@ bool EFGBuilder::Impl::decode_at(
 	if (offset >= sec->bytes_.size()) {
 		return false;
 	}
-	return ZYAN_SUCCESS(ZydisDecoderDecodeFull(
-		&decoder_,
+	// 仅解码指令头, 操作数留待分支/调用类指令按需再解(降低多数指令的解码开销)
+	return ZYAN_SUCCESS(ZydisDecoderDecodeInstruction(
+		&decoder_, &context,
 		sec->bytes_.data() + offset,
 		sec->bytes_.size() - offset,
-		&instr, operands));
+		&instr));
+}
+
+bool EFGBuilder::Impl::decode_operands(
+	const ZydisDecodedInstruction &instr,
+	const ZydisDecoderContext &context,
+	ZydisDecodedOperand *operands) {
+	// 需与指令头解码共用同一个context(保存Zydis内部解码状态)
+	return ZYAN_SUCCESS(ZydisDecoderDecodeOperands(
+		&decoder_, &context, &instr,
+		operands, instr.operand_count_visible));
 }
 
 bool EFGBuilder::Impl::is_executable_rva(uint64_t rva) {
@@ -542,18 +566,26 @@ void EFGBuilder::Impl::preprocess_thunks(
 	uint64_t code_base) {
 	// 逐指令解码整个代码段, 识别"jmp [IAT]"形式的导入thunk跳板
 	// 这类跳板是编译器为导入函数生成的间接跳转占位, 调用点call到跳板即等价于调用导入函数
+	// 仅对JMP指令按需解码操作数(其余指令仅解指令头)
 	size_t offset = 0;
 	while (offset < code.size()) {
 		ZydisDecodedInstruction instr {};
-		ZydisDecodedOperand op_buf[ZYDIS_MAX_OPERAND_COUNT];
+		ZydisDecoderContext context {};
 		// 解码失败则单字节前进(容忍非代码数据), 成功则按指令长度前进
-		if (!ZYAN_SUCCESS(ZydisDecoderDecodeFull(
-				&decoder_, code.data() + offset,
-				code.size() - offset, &instr, op_buf))) {
+		if (!ZYAN_SUCCESS(ZydisDecoderDecodeInstruction(
+				&decoder_, &context, code.data() + offset,
+				code.size() - offset, &instr))) {
 			offset++;
 			continue;
 		}
 		if (instr.mnemonic == ZYDIS_MNEMONIC_JMP) {
+			ZydisDecodedOperand op_buf[ZYDIS_MAX_OPERAND_COUNT];
+			if (!ZYAN_SUCCESS(ZydisDecoderDecodeOperands(
+					&decoder_, &context, &instr,
+					op_buf, instr.operand_count_visible))) {
+				offset += instr.length;
+				continue;
+			}
 			// 遍历操作数, 解析jmp的目标是否命中IAT
 			for (uint8_t i = 0; i < instr.operand_count_visible; ++i) {
 				const auto &op = op_buf[i];
