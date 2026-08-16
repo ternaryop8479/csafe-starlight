@@ -86,10 +86,12 @@ private:
 	 * @param current_trie_node 当前节点的Trie树父节点
 	 * @param current_efg_node 当前节点在EFG中的位置
 	 * @param current_skip_count 当前链条匹配跳过次数
+	 * @param memory 记忆化哈希表
+	 * @param model_api_id_map EFG api_id->Model api_id的映射表，传入预分配好的空表即可，dfs内部会进行动态映射
 	 * @details 若当前节点有匹配链条的话，current_trie_node的所有子节点中有且仅有一个子节点和current_efg_node的API相同
 	 * @return 当前DFS所匹配到的总权重
 	 */
-	DFSData dfs_risk_score(const EFG &efg, bool enable_record_evidence, SIZE_T current_trie_node, SIZE_T current_efg_node, SIZE_T current_skip_count, std::unordered_map<GREAT_SIZE_T, DFSData> &memory);
+	DFSData dfs_risk_score(const EFG &efg, bool enable_record_evidence, SIZE_T current_trie_node, SIZE_T current_efg_node, SIZE_T current_skip_count, std::unordered_map<GREAT_SIZE_T, DFSData> &memory, std::vector<APIID_T> &model_api_id_map);
 };
 
 } // namespace starlight_v3::tspm

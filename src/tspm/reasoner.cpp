@@ -6,6 +6,7 @@
  */
 
 #include <memory>
+#include <vector>
 
 #include "basic/types.h"
 #include "tspm/reasoner.h"
@@ -36,10 +37,13 @@ AnalysisResult Reasoner::analyze_efg(const EFG &efg, bool enable_record_evidence
 	// 记忆化哈希表
 	std::unordered_map<GREAT_SIZE_T, DFSData> memory;
 
+	// EFG api_id->Model api_id映射表
+	std::vector<APIID_T> model_api_id_map(efg.api_table_.get_table().size(), INVALID_NUM);
+
 	// 分别将每个节点作为根节点执行匹配任务
 	for (SIZE_T i = 0; i < efg.nodes_.size(); ++i) {
 		// 匹配链条并叠加至总权重
-		DFSData current_dfs_data = dfs_risk_score(efg, enable_record_evidence, 0, i, 0, memory);
+		DFSData current_dfs_data = dfs_risk_score(efg, enable_record_evidence, 0, i, 0, memory, model_api_id_map);
 
 		// 判断证据树是否为空并加入推理结果
 		if (current_dfs_data.current_tree != nullptr) {
@@ -88,7 +92,7 @@ AnalysisResult Reasoner::analyze_efg(const EFG &efg, bool enable_record_evidence
 //          current_efg_subnode, current_skip_count(如果matched_trie_node为INVALID_NUM则该参数为current_skip_count+1，否则为0)作为参数执行DFS
 //     5.2. 将当前DFS的返回值叠加到dfs_weight上
 // 6. 如果dfs_weight中black_weight或white_weight不等于0，则返回dfs_weight，否则返回matched_weight
-Reasoner::DFSData Reasoner::dfs_risk_score(const EFG &efg, bool enable_record_evidence, SIZE_T current_trie_node, SIZE_T current_efg_node, SIZE_T current_skip_count, std::unordered_map<GREAT_SIZE_T, DFSData> &memory) {
+Reasoner::DFSData Reasoner::dfs_risk_score(const EFG &efg, bool enable_record_evidence, SIZE_T current_trie_node, SIZE_T current_efg_node, SIZE_T current_skip_count, std::unordered_map<GREAT_SIZE_T, DFSData> &memory, std::vector<APIID_T> &model_api_id_map) {
 	// 生成当前参数下的记忆化哈希表键
 	GREAT_SIZE_T key = make_64_key(current_trie_node, current_efg_node, current_skip_count);
 
@@ -108,8 +112,13 @@ Reasoner::DFSData Reasoner::dfs_risk_score(const EFG &efg, bool enable_record_ev
 	for (int i = model_.nodes[current_trie_node].trans_start; i - model_.nodes[current_trie_node].trans_start < model_.nodes[current_trie_node].trans_count; ++i) {
 		const TrieNode &current_trie_subnode = model_.nodes[model_.edges[i]]; // Alias for 当前子节点
 
+		// 更新model_api_id_map(EFG api_id->Model api_id)
+		if(model_api_id_map[efg.nodes_[current_efg_node]] == INVALID_NUM) {
+			model_api_id_map[efg.nodes_[current_efg_node]] = model_.api_table.query_id(efg.api_table_.query_api(efg.nodes_[current_efg_node]).second).second;
+		}
+
 		// 检查current_trie_subnode和current_efg_node的API是否相同
-		if (model_.api_table.query_api(current_trie_subnode.api_id).second == efg.api_table_.query_api(efg.nodes_[current_efg_node]).second) {
+		if (current_trie_subnode.api_id == model_api_id_map[efg.nodes_[current_efg_node]]) {
 			// 判断当前节点是否有权重，要有权重才能写入进matched_weight
 			if (!near_zero(current_trie_subnode.weight)) {
 				// 将权重写入matched_weight
@@ -146,7 +155,7 @@ Reasoner::DFSData Reasoner::dfs_risk_score(const EFG &efg, bool enable_record_ev
 	// 遍历current_efg_node的所有子节点
 	for (SIZE_T i = efg.offeset_[current_efg_node]; i < efg.offeset_[current_efg_node + 1]; ++i) {
 		// 直接把结果加到dfs_weight上，因为如果没挖掘到数据的话，dfs_risk_score返回的DFSData为空
-		DFSData current_dfs_data = dfs_risk_score(efg, enable_record_evidence, dfs_trie_node, efg.edges_[i].to_node_index, dfs_skip_count, memory);
+		DFSData current_dfs_data = dfs_risk_score(efg, enable_record_evidence, dfs_trie_node, efg.edges_[i].to_node_index, dfs_skip_count, memory, model_api_id_map);
 
 		// 检查当前dfs是否挖掘到结果(只要当前dfs出来的节点不是nullptr就一定挖到了节点)且允许记录dfs树
 		if (enable_record_evidence && current_dfs_data.current_tree != nullptr) {
