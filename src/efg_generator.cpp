@@ -196,12 +196,14 @@ bool PEParser::is_64bit() const {
 	return impl_->is_64bit_;
 }
 
-// 跳跃记录，记录控制流跳跃的RVA、跨度及是否为间接跳转
-struct JumpRecord {
-	uint64_t jump_rva_; ///< 产生跳跃的指令所在RVA
-	int64_t span_; ///< 跳跃跨度(目标RVA与当前RVA之差, 仅直接跳转有效)
-	bool has_span_; ///< 是否为直接跳转(可直接计算跨度)
-	bool is_indirect_; ///< 是否为间接跳转(寄存器/内存间接目标)
+// 跳跃统计的在线聚合数据，O(1)拷贝/合并，避免为每条跳跃记录做堆分配
+// 平均跨度与方差在构建结束时由各统计量一次换算(E[x]与E[x^2]式)
+struct JumpStats {
+	int jump_count = 0; ///< 跳跃总次数
+	int indirect_jump_count = 0; ///< 其中间接跳跃的次数
+	int spans_with_data = 0; ///< 携带跨度数据(直接跳转)的跳跃数
+	double sum_span = 0.0; ///< 直接跳跃跨度之和
+	double sum_sq_span = 0.0; ///< 直接跳跃跨度平方之和(用于方差换算)
 };
 
 // EFG内部节点数据，存储调用点RVA、API名和是否为入口节点
@@ -211,16 +213,13 @@ struct EFGNodeData {
 	bool is_entry_; ///< 是否为入口节点
 };
 
-// EFG内部边数据，包含跳跃详情及统计信息
+// EFG内部边数据，汇总跳跃统计信息
 struct EFGEdgeData {
-	uint64_t from_call_index_; ///< 源节点RVA(调用点或ENTRY)
-	uint64_t to_node_index_; ///< 目标节点RVA(被调用的导入函数)
-	std::vector<JumpRecord> jumps_; ///< 该边累积的全部跳跃记录
 	int jump_count_ = 0; ///< 跳跃总次数
 	int indirect_jump_count_ = 0; ///< 其中间接跳跃的次数
-	double avg_span_ = 0.0; ///< 直接跳跃的平均跨度
-	double span_variance_ = 0.0; ///< 直接跳跃跨度的方差
 	int spans_with_data_ = 0; ///< 携带跨度数据(直接跳转)的跳跃数
+	double sum_span_ = 0.0; ///< 直接跳跃跨度之和
+	double sum_sq_span_ = 0.0; ///< 直接跳跃跨度平方之和
 };
 
 // EFG构建器，从已解析的PE数据构建外部调用流程图
@@ -246,7 +245,10 @@ struct EFGBuilder::Impl {
 
 	void build_global_efg(); ///< 从入口点开始遍历控制流, 收集节点与边
 	void add_or_update_edge(uint64_t from, uint64_t to,
-		const std::vector<JumpRecord> &jumps); ///< 聚合(源,目标)边的跳跃记录并重算统计量
+		const JumpStats &stats); ///< 聚合(源,目标)边的跳跃统计量
+	static void record_jump(JumpStats &stats, uint64_t rva,
+		uint64_t target_rva, const ZydisDecodedInstruction &instr,
+		const ZydisDecodedOperand *op_buf); ///< 将一次跳跃计入在线统计
 	bool get_call_target(uint64_t rva,
 		const ZydisDecodedInstruction &instr,
 		const ZydisDecodedOperand *op_buf,
@@ -299,11 +301,11 @@ void EFGBuilder::Impl::build_global_efg() {
 	// 预置入口节点(哨兵RVA)
 	api_nodes_[ENTRY_NODE_RVA] = { ENTRY_NODE_RVA, "ENTRY", true };
 
-	// 工作队列状态: 当前待解码的RVA + 最近一个已建节点RVA + 途中累积的跳跃记录
+	// 工作队列状态: 当前待解码的RVA + 最近一个已建节点RVA + 途中累积的跳跃统计
 	struct State {
 		uint64_t rva;
 		uint64_t prev_api;
-		std::vector<JumpRecord> jumps;
+		JumpStats jumps;
 	};
 
 	std::queue<State> worklist;
@@ -368,40 +370,17 @@ void EFGBuilder::Impl::build_global_efg() {
 		// 情形4: 无条件跳转 -> 记录跳跃(若目标可执行则追踪目标), 不再追踪顺序流
 		if (instr.meta.category == ZYDIS_CATEGORY_UNCOND_BR) {
 			if (has_target && is_executable_rva(target_rva)) {
-				// 判断是否为直接跳转(存在立即数操作数)
-				bool is_direct = false;
-				for (uint8_t i = 0; i < instr.operand_count_visible; ++i) {
-					if (op_buf[i].type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
-						is_direct = true;
-						break;
-					}
-				}
-				state.jumps.push_back({ rva,
-					is_direct ? std::abs(static_cast<int64_t>(target_rva) - static_cast<int64_t>(rva))
-							  : 0,
-					is_direct,
-					!is_direct });
+				record_jump(state.jumps, rva, target_rva, instr, op_buf);
 				worklist.push({ target_rva, prev_api, std::move(state.jumps) });
 			}
 			continue;
 		}
 
-		// 情形5: 条件跳转 -> 跳跃记录需保留副本(两分支共用), 同时追踪目标与顺序流
+		// 情形5: 条件跳转 -> 跳跃统计需保留副本(两分支共用), 同时追踪目标与顺序流
 		if (instr.meta.category == ZYDIS_CATEGORY_COND_BR) {
 			if (has_target && is_executable_rva(target_rva)) {
-				bool is_direct = false;
-				for (uint8_t i = 0; i < instr.operand_count_visible; ++i) {
-					if (op_buf[i].type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
-						is_direct = true;
-						break;
-					}
-				}
-				auto jumps_copy = state.jumps; // 拷贝一份给跳转分支
-				jumps_copy.push_back({ rva,
-					is_direct ? std::abs(static_cast<int64_t>(target_rva) - static_cast<int64_t>(rva))
-							  : 0,
-					is_direct,
-					!is_direct });
+				JumpStats jumps_copy = state.jumps; // 拷贝一份给跳转分支
+				record_jump(jumps_copy, rva, target_rva, instr, op_buf);
 				worklist.push({ target_rva, prev_api, jumps_copy });
 			}
 			worklist.push({ next_rva, prev_api, std::move(state.jumps) });
@@ -413,52 +392,47 @@ void EFGBuilder::Impl::build_global_efg() {
 	}
 }
 
+void EFGBuilder::Impl::record_jump(JumpStats &stats, uint64_t rva,
+	uint64_t target_rva, const ZydisDecodedInstruction &instr,
+	const ZydisDecodedOperand *op_buf) {
+	++stats.jump_count;
+
+	// 判断是否为直接跳转(存在立即数操作数)
+	bool is_direct = false;
+	for (uint8_t i = 0; i < instr.operand_count_visible; ++i) {
+		if (op_buf[i].type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
+			is_direct = true;
+			break;
+		}
+	}
+
+	// 间接跳转无跨度数据
+	if (!is_direct) {
+		++stats.indirect_jump_count;
+		return;
+	}
+
+	// 直接跳转: 累计跨度与平方, 供结束时换算均值/方差
+	++stats.spans_with_data;
+	const double span = std::abs(static_cast<int64_t>(target_rva) -
+		static_cast<int64_t>(rva));
+	stats.sum_span += span;
+	stats.sum_sq_span += span * span;
+}
+
 void EFGBuilder::Impl::add_or_update_edge(
 	uint64_t from, uint64_t to,
-	const std::vector<JumpRecord> &jumps) {
+	const JumpStats &stats) {
 	// 忽略非法节点RVA(0既非ENTRY也非有效调用点)
 	if (from == 0 || to == 0)
 		return;
-	// 以(源,目标)为键聚合边: 同一对节点多次出现时累积跳跃记录
+	// 以(源,目标)为键聚合边: 同一对节点多次出现时累加跳跃统计量(O(1))
 	auto &edge = api_edges_[{ from, to }];
-	edge.from_call_index_ = from;
-	edge.to_node_index_ = to;
-
-	// 追加本次收集的跳跃记录
-	for (const auto &j : jumps) {
-		edge.jumps_.push_back(j);
-	}
-
-	// 重新统计跳跃次数与间接跳转次数
-	edge.jump_count_ = static_cast<int>(edge.jumps_.size());
-	edge.indirect_jump_count_ = static_cast<int>(
-		std::count_if(edge.jumps_.begin(), edge.jumps_.end(),
-			[](const JumpRecord &j) {
-				return j.is_indirect_;
-			}));
-	// 统计携带跨度数据(直接跳转)的跳跃数
-	edge.spans_with_data_ = static_cast<int>(
-		std::count_if(edge.jumps_.begin(), edge.jumps_.end(),
-			[](const JumpRecord &j) {
-				return j.has_span_;
-			}));
-
-	// 有直接跳转数据时计算平均跨度与跨度方差(总体方差)
-	if (edge.spans_with_data_ > 0) {
-		double sum = 0;
-		for (const auto &j : edge.jumps_) {
-			if (j.has_span_)
-				sum += j.span_;
-		}
-		edge.avg_span_ = sum / edge.spans_with_data_;
-		double sq_sum = 0;
-		for (const auto &j : edge.jumps_) {
-			if (j.has_span_) {
-				sq_sum += (j.span_ - edge.avg_span_) * (j.span_ - edge.avg_span_);
-			}
-		}
-		edge.span_variance_ = sq_sum / edge.spans_with_data_;
-	}
+	edge.jump_count_ += stats.jump_count;
+	edge.indirect_jump_count_ += stats.indirect_jump_count;
+	edge.spans_with_data_ += stats.spans_with_data;
+	edge.sum_span_ += stats.sum_span;
+	edge.sum_sq_span_ += stats.sum_sq_span;
 }
 
 bool EFGBuilder::Impl::get_call_target(
@@ -684,8 +658,9 @@ EFG EFGBuilder::Impl::to_efg() {
 	std::vector<EdgeEntry> edge_entries;
 	edge_entries.reserve(api_edges_.size());
 	for (const auto &[pair, edge] : api_edges_) {
-		auto from_it = rva_to_index.find(edge.from_call_index_);
-		auto to_it = rva_to_index.find(edge.to_node_index_);
+		// 源/目标RVA即聚合键
+		auto from_it = rva_to_index.find(pair.first);
+		auto to_it = rva_to_index.find(pair.second);
 		if (from_it == rva_to_index.end() || to_it == rva_to_index.end()) {
 			continue; // 目标不是EFG节点(如未收录的RVA)则跳过
 		}
@@ -722,9 +697,19 @@ EFG EFGBuilder::Impl::to_efg() {
 		efg.edges_[pos].to_node_index = entry.to_index;
 		efg.edges_[pos].jump_count = static_cast<SIZE_T>(edge->jump_count_);
 		efg.edges_[pos].indirect_jump_count = static_cast<SIZE_T>(edge->indirect_jump_count_);
-		efg.edges_[pos].avg_span = edge->avg_span_;
-		efg.edges_[pos].span_variance = edge->span_variance_;
 		efg.edges_[pos].spans_with_data = static_cast<SIZE_T>(edge->spans_with_data_);
+
+		// 由在线统计量换算平均跨度与总体方差(E[x^2]-E[x]^2式, 与原逐条求和等价)
+		if (edge->spans_with_data_ > 0) {
+			const double avg_span = edge->sum_span_ / edge->spans_with_data_;
+			efg.edges_[pos].avg_span = avg_span;
+			double variance = edge->sum_sq_span_ / edge->spans_with_data_ -
+				avg_span * avg_span;
+			efg.edges_[pos].span_variance = (variance > 0.0) ? variance : 0.0; // 数值误差防护
+		} else {
+			efg.edges_[pos].avg_span = 0.0;
+			efg.edges_[pos].span_variance = 0.0;
+		}
 	}
 
 	return efg;
