@@ -334,7 +334,8 @@ void EFGBuilder::Impl::build_global_efg() {
 
 		// 该(rva, prev_api)组合已处理过则跳过
 		if (!visited_states.insert(
-				(static_cast<GREAT_SIZE_T>(rva) << 32) | prev_api).second)
+							   (static_cast<GREAT_SIZE_T>(rva) << 32) | prev_api)
+				.second)
 			continue;
 
 		// 仅解码指令头(不含操作数), context为后续按需解操作数保留
@@ -347,9 +348,7 @@ void EFGBuilder::Impl::build_global_efg() {
 		const ZydisInstructionCategory category = instr.meta.category;
 
 		// 仅分支/调用类指令才需要解码操作数(普通指令占绝大多数, 可省去操作数解码开销)
-		const bool is_branch_or_call = (category == ZYDIS_CATEGORY_CALL) ||
-			(category == ZYDIS_CATEGORY_UNCOND_BR) ||
-			(category == ZYDIS_CATEGORY_COND_BR);
+		const bool is_branch_or_call = (category == ZYDIS_CATEGORY_CALL) || (category == ZYDIS_CATEGORY_UNCOND_BR) || (category == ZYDIS_CATEGORY_COND_BR);
 		ZydisDecodedOperand op_buf[ZYDIS_MAX_OPERAND_COUNT];
 		uint64_t target_rva = 0;
 		bool is_import = false;
@@ -437,8 +436,7 @@ void EFGBuilder::Impl::record_jump(JumpStats &stats, uint64_t rva,
 
 	// 直接跳转: 累计跨度与平方, 供结束时换算均值/方差
 	++stats.spans_with_data;
-	const double span = std::abs(static_cast<int64_t>(target_rva) -
-		static_cast<int64_t>(rva));
+	const double span = std::abs(static_cast<int64_t>(target_rva) - static_cast<int64_t>(rva));
 	stats.sum_span += span;
 	stats.sum_sq_span += span * span;
 }
@@ -533,9 +531,7 @@ bool EFGBuilder::Impl::decode_at(
 	ZydisDecoderContext &context,
 	const CodeSection *&sec_cache) {
 	// 顺序流上rva通常连续递增, 借助缓存段摊还段定位(仅越出段范围时才重新定位)
-	if (sec_cache == nullptr ||
-		rva < sec_cache->base_rva_ ||
-		rva >= sec_cache->base_rva_ + sec_cache->size_) {
+	if (sec_cache == nullptr || rva < sec_cache->base_rva_ || rva >= sec_cache->base_rva_ + sec_cache->size_) {
 		size_t offset = 0;
 		sec_cache = find_section(rva, offset);
 		if (sec_cache == nullptr) {
@@ -754,8 +750,7 @@ EFG EFGBuilder::Impl::to_efg() {
 		if (edge->spans_with_data_ > 0) {
 			const double avg_span = edge->sum_span_ / edge->spans_with_data_;
 			efg.edges_[pos].avg_span = avg_span;
-			double variance = edge->sum_sq_span_ / edge->spans_with_data_ -
-				avg_span * avg_span;
+			double variance = edge->sum_sq_span_ / edge->spans_with_data_ - avg_span * avg_span;
 			efg.edges_[pos].span_variance = (variance > 0.0) ? variance : 0.0; // 数值误差防护
 		} else {
 			efg.edges_[pos].avg_span = 0.0;

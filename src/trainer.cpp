@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <atomic>
-#include <numeric>
 #include <random>
 #include <thread>
 
@@ -78,8 +77,10 @@ std::vector<std::vector<size_t>> split_folds(size_t total, starlight_v3::SIZE_T 
 	const size_t normal_n = normal_idx.size();
 	const size_t max_n = std::max(edgeless_n, normal_n);
 	for (size_t i = 0; i < max_n; ++i) {
-		if (i < edgeless_n) indices.push_back(edgeless_idx[i]);
-		if (i < normal_n) indices.push_back(normal_idx[i]);
+		if (i < edgeless_n)
+			indices.push_back(edgeless_idx[i]);
+		if (i < normal_n)
+			indices.push_back(normal_idx[i]);
 	}
 
 	std::vector<std::vector<size_t>> folds(static_cast<size_t>(k));

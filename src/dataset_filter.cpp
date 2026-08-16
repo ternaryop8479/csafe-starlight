@@ -33,8 +33,8 @@
 
 #include <openssl/md5.h>
 
-#include "external/BS_thread_pool.hpp"
 #include "efg_generator.h"
+#include "external/BS_thread_pool.hpp"
 
 namespace fs = std::filesystem;
 
@@ -284,8 +284,10 @@ int main(int argc, char *argv[]) {
 	// 合并待拷贝列表
 	std::vector<SampleEntry> to_copy;
 	to_copy.reserve(keep_edgeless + keep_normal);
-	for (auto &s : edgeless_samples) to_copy.push_back(std::move(s));
-	for (auto &s : normal_samples) to_copy.push_back(std::move(s));
+	for (auto &s : edgeless_samples)
+		to_copy.push_back(std::move(s));
+	for (auto &s : normal_samples)
+		to_copy.push_back(std::move(s));
 
 	std::cout << "[Info] 开始拷贝 " << to_copy.size() << " 个样本到 " << dst_dir << " ..." << std::endl;
 	std::atomic<size_t> copied { 0 };

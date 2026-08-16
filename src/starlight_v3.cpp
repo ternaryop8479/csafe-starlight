@@ -25,17 +25,15 @@
 #include <iostream>
 #include <mutex>
 #include <optional>
-#include <sstream>
-#include <stdexcept>
 #include <string>
 #include <thread>
 #include <unordered_set>
 #include <vector>
 
 #include "efg_generator.h"
+#include "external/BS_thread_pool.hpp"
 #include "model.h"
 #include "reasoner.h"
-#include "external/BS_thread_pool.hpp"
 #include "trainer.h"
 
 namespace fs = std::filesystem;
@@ -552,10 +550,10 @@ int infer_folder(const starlight_v3::Model &model, const fs::path &folder_path, 
 		return -1;
 	}
 
-	std::atomic<size_t> malware_count{0};
-	std::atomic<size_t> benign_count{0};
-	std::atomic<size_t> suspicious_count{0};
-	std::atomic<size_t> failed_count{0};
+	std::atomic<size_t> malware_count { 0 };
+	std::atomic<size_t> benign_count { 0 };
+	std::atomic<size_t> suspicious_count { 0 };
+	std::atomic<size_t> failed_count { 0 };
 	std::mutex cout_mutex; // 保护std::cout并发输出
 
 	// 是否启用三分类

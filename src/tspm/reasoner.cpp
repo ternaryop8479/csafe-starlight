@@ -113,7 +113,7 @@ Reasoner::DFSData Reasoner::dfs_risk_score(const EFG &efg, bool enable_record_ev
 		const TrieNode &current_trie_subnode = model_.nodes[model_.edges[i]]; // Alias for 当前子节点
 
 		// 更新model_api_id_map(EFG api_id->Model api_id)
-		if(model_api_id_map[efg.nodes_[current_efg_node]] == INVALID_NUM) {
+		if (model_api_id_map[efg.nodes_[current_efg_node]] == INVALID_NUM) {
 			model_api_id_map[efg.nodes_[current_efg_node]] = model_.api_table.query_id(efg.api_table_.query_api(efg.nodes_[current_efg_node]).second).second;
 		}
 
