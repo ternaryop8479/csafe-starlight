@@ -258,7 +258,8 @@ struct EFGBuilder::Impl {
 	const CodeSection *find_section(uint64_t rva,
 		size_t &out_offset) const; ///< 定位rva所在可执行段(未命中返回nullptr)
 	bool decode_at(uint64_t rva, ZydisDecodedInstruction &instr,
-		ZydisDecoderContext &context); ///< 在可执行段内解码rva处指令头(不含操作数)
+		ZydisDecoderContext &context,
+		const CodeSection *&sec_cache); ///< 在可执行段内解码rva处指令头(不含操作数), sec_cache为段定位缓存(沿顺序流复用)
 	bool decode_operands(const ZydisDecodedInstruction &instr,
 		const ZydisDecoderContext &context,
 		ZydisDecodedOperand *operands); ///< 解码指令操作数(需与指令头共用context)
@@ -320,6 +321,9 @@ void EFGBuilder::Impl::build_global_efg() {
 	std::unordered_set<GREAT_SIZE_T> visited_states;
 	visited_states.reserve(1 << 20);
 
+	// 段定位缓存: 顺序流rva连续递增, 沿流程复用当前段免去逐指令段扫描
+	const CodeSection *sec_cache = nullptr;
+
 	SIZE_T i = 0;
 	while (!worklist.empty() && i++ < STATE_LIMIT) { // 状态上限防御(见STATE_LIMIT说明)
 		State state = worklist.front();
@@ -336,7 +340,7 @@ void EFGBuilder::Impl::build_global_efg() {
 		// 仅解码指令头(不含操作数), context为后续按需解操作数保留
 		ZydisDecodedInstruction instr {};
 		ZydisDecoderContext context {};
-		if (!decode_at(rva, instr, context))
+		if (!decode_at(rva, instr, context, sec_cache))
 			continue;
 
 		uint64_t next_rva = rva + instr.length; // 顺序下一条指令
@@ -526,22 +530,29 @@ const CodeSection *EFGBuilder::Impl::find_section(
 bool EFGBuilder::Impl::decode_at(
 	uint64_t rva,
 	ZydisDecodedInstruction &instr,
-	ZydisDecoderContext &context) {
-	size_t offset = 0;
-	const CodeSection *sec = find_section(rva, offset);
-	if (!sec) {
-		return false;
+	ZydisDecoderContext &context,
+	const CodeSection *&sec_cache) {
+	// 顺序流上rva通常连续递增, 借助缓存段摊还段定位(仅越出段范围时才重新定位)
+	if (sec_cache == nullptr ||
+		rva < sec_cache->base_rva_ ||
+		rva >= sec_cache->base_rva_ + sec_cache->size_) {
+		size_t offset = 0;
+		sec_cache = find_section(rva, offset);
+		if (sec_cache == nullptr) {
+			return false;
+		}
 	}
+	const size_t offset = static_cast<size_t>(rva - sec_cache->base_rva_);
 	// VirtualSize > SizeOfRawData 的节段(虚拟填充/.bss/截断文件)可能没有原始字节,
 	// 此时 data()+offset 越过缓冲区、size()-offset 下溢, 必须拒绝
-	if (offset >= sec->bytes_.size()) {
+	if (offset >= sec_cache->bytes_.size()) {
 		return false;
 	}
 	// 仅解码指令头, 操作数留待分支/调用类指令按需再解(降低多数指令的解码开销)
 	return ZYAN_SUCCESS(ZydisDecoderDecodeInstruction(
 		&decoder_, &context,
-		sec->bytes_.data() + offset,
-		sec->bytes_.size() - offset,
+		sec_cache->bytes_.data() + offset,
+		sec_cache->bytes_.size() - offset,
 		&instr));
 }
 
