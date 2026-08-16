@@ -310,8 +310,9 @@ void EFGBuilder::Impl::build_global_efg() {
 	// 从入口点开始, prev_api初始为ENTRY节点
 	worklist.push({ parser_.get_entry_point(), ENTRY_NODE_RVA, {} });
 
-	// 去重表: 记录(rva, prev_api)组合是否已处理, 防止无限循环
-	std::unordered_map<uint64_t, std::unordered_set<uint64_t>> visited_states;
+	// 去重表: 以打包键(rva, prev_api)记录组合是否已处理, 防止无限循环
+	std::unordered_set<GREAT_SIZE_T> visited_states;
+	visited_states.reserve(1 << 20);
 
 	SIZE_T i = 0;
 	while (!worklist.empty() && i++ < STATE_LIMIT) { // 状态上限防御(见STATE_LIMIT说明)
@@ -322,9 +323,9 @@ void EFGBuilder::Impl::build_global_efg() {
 		uint64_t prev_api = state.prev_api;
 
 		// 该(rva, prev_api)组合已处理过则跳过
-		if (visited_states[rva].count(prev_api))
+		if (!visited_states.insert(
+				(static_cast<GREAT_SIZE_T>(rva) << 32) | prev_api).second)
 			continue;
-		visited_states[rva].insert(prev_api);
 
 		// RVA不在任何可执行段内则跳过
 		if (!is_executable_rva(rva))
