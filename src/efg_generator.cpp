@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <map>
+#include <cstring>
 #include <memory>
 #include <queue>
 #include <string>
@@ -246,6 +246,7 @@ struct EFGBuilder::Impl {
 	void build_global_efg(); ///< 从入口点开始遍历控制流, 收集节点与边
 	void add_or_update_edge(uint64_t from, uint64_t to,
 		const JumpStats &stats); ///< 聚合(源,目标)边的跳跃统计量
+	static uint64_t edge_key(uint64_t from, uint64_t to); ///< 打包(源,目标)RVA为64位键
 	static void record_jump(JumpStats &stats, uint64_t rva,
 		uint64_t target_rva, const ZydisDecodedInstruction &instr,
 		const ZydisDecodedOperand *op_buf); ///< 将一次跳跃计入在线统计
@@ -270,7 +271,7 @@ struct EFGBuilder::Impl {
 	std::unordered_map<uint64_t, std::string> iat_by_va_; ///< IAT的VA->导入名映射
 	std::unordered_map<uint64_t, std::string> thunk_by_rva_; ///< thunk跳板RVA->导入名映射(预处理阶段收集)
 	std::unordered_map<uint64_t, EFGNodeData> api_nodes_; ///< 节点RVA->节点数据
-	std::map<std::pair<uint64_t, uint64_t>, EFGEdgeData> api_edges_; ///< (源,目标)RVA对->边数据
+	std::unordered_map<uint64_t, EFGEdgeData> api_edges_; ///< 边键(打包源/目标RVA)->边数据
 };
 
 EFGBuilder::Impl::Impl(const PEParser &parser)
@@ -420,14 +421,19 @@ void EFGBuilder::Impl::record_jump(JumpStats &stats, uint64_t rva,
 	stats.sum_sq_span += span * span;
 }
 
+uint64_t EFGBuilder::Impl::edge_key(uint64_t from, uint64_t to) {
+	// 源与目标RVA均小于2^32(ENTRY哨兵0xFFFFFFFF亦合法)，可直接打包
+	return (from << 32) | to;
+}
+
 void EFGBuilder::Impl::add_or_update_edge(
 	uint64_t from, uint64_t to,
 	const JumpStats &stats) {
 	// 忽略非法节点RVA(0既非ENTRY也非有效调用点)
 	if (from == 0 || to == 0)
 		return;
-	// 以(源,目标)为键聚合边: 同一对节点多次出现时累加跳跃统计量(O(1))
-	auto &edge = api_edges_[{ from, to }];
+	// 以打包键聚合边: 同一对节点多次出现时累加跳跃统计量(O(1))
+	auto &edge = api_edges_[edge_key(from, to)];
 	edge.jump_count_ += stats.jump_count;
 	edge.indirect_jump_count_ += stats.indirect_jump_count;
 	edge.spans_with_data_ += stats.spans_with_data;
@@ -657,10 +663,12 @@ EFG EFGBuilder::Impl::to_efg() {
 	};
 	std::vector<EdgeEntry> edge_entries;
 	edge_entries.reserve(api_edges_.size());
-	for (const auto &[pair, edge] : api_edges_) {
-		// 源/目标RVA即聚合键
-		auto from_it = rva_to_index.find(pair.first);
-		auto to_it = rva_to_index.find(pair.second);
+	for (const auto &[key, edge] : api_edges_) {
+		// 从打包键还原源/目标RVA
+		const uint64_t from = key >> 32;
+		const uint64_t to = key & 0xFFFFFFFFull;
+		auto from_it = rva_to_index.find(from);
+		auto to_it = rva_to_index.find(to);
 		if (from_it == rva_to_index.end() || to_it == rva_to_index.end()) {
 			continue; // 目标不是EFG节点(如未收录的RVA)则跳过
 		}
