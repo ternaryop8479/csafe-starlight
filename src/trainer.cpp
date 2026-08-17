@@ -84,8 +84,11 @@ std::vector<std::vector<size_t>> split_folds(size_t total, starlight_v3::SIZE_T 
 	}
 
 	std::vector<std::vector<size_t>> folds(static_cast<size_t>(k));
+	// 按连续分块分配折: 穿插序列本身已按edgeless/普通交错, 每折拿到一段连续区间即可保证两类比例均衡;
+	// 若按i%k隔位分配, 当k=2时偶数位全是edgeless、奇数位全是普通, 训练折会被整折剔除导致崩溃
+	const size_t kk = static_cast<size_t>(k);
 	for (size_t i = 0; i < total; ++i) {
-		folds[i % static_cast<size_t>(k)].push_back(indices[i]);
+		folds[std::min(i * kk / total, kk - 1)].push_back(indices[i]);
 	}
 	return folds;
 }
