@@ -16,8 +16,8 @@
 
 namespace {
 
-// 模型文件的魔数与版本号
-constexpr char MODEL_MAGIC[8] = { 'C', 'S', 'T', 'A', 'R', 'L', 'V', '3' };
+// 模型文件的魔数(自适应长度: 以'\0'结尾, 读取时按strlen取实际长度, 后续魔数变长无需改读取逻辑)
+constexpr char MODEL_MAGIC[] = { 'C', 'S', 'T', 'A', 'R', 'L', '3', 'A', '\0' };
 
 // 二进制写缓冲, 所有写入均使用固定宽度类型(uint32_t/uint64_t/double)
 class BufferWriter {
@@ -202,7 +202,7 @@ bool Model::save_to_file(const std::string &path) const {
 
 	// 组装最终文件内容
 	std::string content;
-	content.append(MODEL_MAGIC, sizeof(MODEL_MAGIC));
+	content.append(MODEL_MAGIC, sizeof(MODEL_MAGIC)); // 含结尾'\0', 构成自适应长度魔数
 	content.append(reinterpret_cast<const char *>(&version_), sizeof(version_));
 	const uint64_t tspm_len = static_cast<uint64_t>(tspm_section.size());
 	content.append(reinterpret_cast<const char *>(&tspm_len), sizeof(tspm_len));
@@ -235,11 +235,22 @@ bool Model::load_from_file(const std::string &path) {
 
 	BufferReader reader(content);
 
-	// 校验魔数
-	char magic[sizeof(MODEL_MAGIC)];
-	if (!reader.get(magic) || std::memcmp(magic, MODEL_MAGIC, sizeof(MODEL_MAGIC)) != 0) {
+	// 校验魔数: 按'\0'结尾自适应读取长度, 兼容未来魔数变长
+	constexpr size_t kMaxMagicLen = 32; // 魔数长度上限(防御: 超长魔数视为无效文件)
+	const char *magic_start = reader.ptr;
+	size_t magic_len = 0;
+	while (magic_len < kMaxMagicLen && magic_len < static_cast<size_t>(reader.end - magic_start)
+		&& magic_start[magic_len] != '\0') {
+		++magic_len;
+	}
+	if (magic_len >= kMaxMagicLen || magic_len >= static_cast<size_t>(reader.end - magic_start)
+		|| magic_start[magic_len] != '\0') {
+		return false; // 未找到魔数终止符或超长, 无效
+	}
+	if (magic_len != std::strlen(MODEL_MAGIC) || std::memcmp(magic_start, MODEL_MAGIC, magic_len) != 0) {
 		return false;
 	}
+	reader.ptr = magic_start + magic_len + 1; // 跳过魔数及其'\0'
 
 	// 读取版本号(病毒库日期标记), 不校验匹配, 兼容任意日期训练的模型
 	if (!reader.get(version_)) {
