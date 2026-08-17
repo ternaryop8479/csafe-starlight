@@ -221,7 +221,6 @@ TSPMFeatPack extract_tspm_feats(const tspm::AnalysisResult &result, const EFG &e
 	feats.avg_malchain_similarity = (accumulator.mal_.chain_count > 0 && mal_covered_count > 0) ? mal_len_stats.mean * (double)accumulator.mal_.chain_count / (double)mal_covered_count : 0.0;
 	feats.avg_malmatch_depth = mal_depth_stats.mean;
 	feats.max_malmatch_depth = (SIZE_T)mal_depth_stats.max;
-	feats.malapi_count = (SIZE_T)accumulator.mal_.length_sum;
 
 	feats.avg_malchain_weight = mal_weight_stats.mean;
 	feats.malchain_weight_var = mal_weight_stats.var;
@@ -250,7 +249,6 @@ TSPMFeatPack extract_tspm_feats(const tspm::AnalysisResult &result, const EFG &e
 	feats.avg_benchain_similarity = (accumulator.ben_.chain_count > 0 && ben_covered_count > 0) ? ben_len_stats.mean * (double)accumulator.ben_.chain_count / (double)ben_covered_count : 0.0;
 	feats.avg_benmatch_depth = ben_depth_stats.mean;
 	feats.max_benmatch_depth = (SIZE_T)ben_depth_stats.max;
-	feats.benapi_count = (SIZE_T)accumulator.ben_.length_sum;
 
 	feats.avg_benchain_weight = ben_weight_stats.mean;
 	feats.benchain_weight_var = ben_weight_stats.var;
@@ -263,14 +261,6 @@ TSPMFeatPack extract_tspm_feats(const tspm::AnalysisResult &result, const EFG &e
 	feats.avg_benchain_branching = ben_branch_avg;
 	feats.max_benchain_branching = accumulator.ben_.branch_max;
 
-	// 跨类比较特征
-	bool mal_has_chain = accumulator.mal_.chain_count > 0;
-	bool ben_has_chain = accumulator.ben_.chain_count > 0;
-	feats.mal_ben_avglength_ratio = (mal_has_chain && ben_has_chain) ? mal_len_stats.mean / ben_len_stats.mean : 0.0;
-	feats.mal_ben_maxlength_ratio = (mal_has_chain && ben_has_chain) ? mal_len_stats.max / ben_len_stats.max : 0.0;
-	feats.chain_count_diff = (accumulator.mal_.chain_count >= accumulator.ben_.chain_count) ? accumulator.mal_.chain_count - accumulator.ben_.chain_count : accumulator.ben_.chain_count - accumulator.mal_.chain_count;
-	feats.is_mal_dominant = mal_has_chain && (!ben_has_chain || accumulator.mal_.max_length >= accumulator.ben_.max_length);
-
 	// 引擎输出特征
 	// 注意: malware_score/benign_score是DFS沿EFG边匹配的权重累加和, 与匹配到的链数正相关,
 	// 直接使用会让LightGBM特征尺度随图规模/链数爆炸(百万级vs个位数), 导致无法分裂.
@@ -279,8 +269,6 @@ TSPMFeatPack extract_tspm_feats(const tspm::AnalysisResult &result, const EFG &e
 	double ben_scale = accumulator.ben_.chain_count > 0 ? (double)accumulator.ben_.chain_count : 1.0;
 	feats.tspm_mal_weight = result.malware_score / mal_scale;
 	feats.tspm_ben_weight = result.benign_score / ben_scale;
-	feats.weight_diff = (result.malware_score / mal_scale) - (result.benign_score / ben_scale);
-	feats.weight_ratio = !near_zero(result.benign_score) ? std::fabs(result.malware_score / result.benign_score) : 0.0;
 	feats.tspm_score = result.final_score;
 
 	return feats;

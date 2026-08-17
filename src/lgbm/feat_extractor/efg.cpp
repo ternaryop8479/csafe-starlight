@@ -143,12 +143,10 @@ EFGFeatPack extract_efg_feats(const EFG &efg) {
 	}
 
 	FeatStats degree_stats = calc_feat_stats(out_degrees.data(), node_count);
-	feats.density = node_count > 1 ? (double)edge_count / ((double)node_count * (node_count - 1)) : 0.0;
 	feats.avg_degree = (double)edge_count / (double)node_count;
 	feats.max_degree = (SIZE_T)degree_stats.max;
 	feats.degree_var = degree_stats.var;
 	feats.degree_ske = degree_stats.ske;
-	feats.edge_node_ratio = (double)edge_count / (double)node_count;
 	feats.isolated_node_count = isolated_count;
 	feats.entropy = calc_entropy(out_degrees.data(), node_count);
 
@@ -172,13 +170,11 @@ EFGFeatPack extract_efg_feats(const EFG &efg) {
 
 	SIZE_T indirect_jmp_edge_count = 0;
 	SIZE_T data_flow_edge_count = 0;
-	double total_indirect_jmp = 0.0;
 	for (SIZE_T e = 0; e < edge_count; ++e) {
 		const EFGEdge &edge = efg.edges_[e];
 		jmp_counts.push_back((double)edge.jump_count);
 		indirect_jmp_counts.push_back((double)edge.indirect_jump_count);
 		spans.push_back(edge.avg_span);
-		total_indirect_jmp += (double)edge.indirect_jump_count;
 
 		if (edge.indirect_jump_count > 0) {
 			++indirect_jmp_edge_count;
@@ -204,7 +200,6 @@ EFGFeatPack extract_efg_feats(const EFG &efg) {
 	feats.indirect_jmp_count_ske = indirect_stats.ske;
 	feats.max_indirect_jmp_count = indirect_stats.max;
 	feats.indirect_jmp_edge_ratio = (double)indirect_jmp_edge_count / (double)edge_count;
-	feats.total_indirect_jmp_count = total_indirect_jmp;
 	feats.max_span = span_stats.max;
 	feats.avg_span = span_stats.mean;
 	feats.span_var = span_stats.var;

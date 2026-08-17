@@ -12,12 +12,10 @@
 #define EFG_FEAT_FIELDS(X)        \
 	X(node_count)                 \
 	X(edge_count)                 \
-	X(density)                    \
 	X(avg_degree)                 \
 	X(max_degree)                 \
 	X(degree_var)                 \
 	X(degree_ske)                 \
-	X(edge_node_ratio)            \
 	X(isolated_node_count)        \
 	X(largest_component_ratio)    \
 	X(entropy)                    \
@@ -30,7 +28,6 @@
 	X(indirect_jmp_count_ske)     \
 	X(max_indirect_jmp_count)     \
 	X(indirect_jmp_edge_ratio)    \
-	X(total_indirect_jmp_count)   \
 	X(max_span)                   \
 	X(avg_span)                   \
 	X(span_var)                   \
@@ -57,10 +54,6 @@
 	X(avg_benchain_length)     \
 	X(malchain_count)          \
 	X(benchain_count)          \
-	X(mal_ben_avglength_ratio) \
-	X(mal_ben_maxlength_ratio) \
-	X(chain_count_diff)        \
-	X(is_mal_dominant)         \
 	X(malchain_density)        \
 	X(benchain_density)        \
 	X(avg_malchain_similarity) \
@@ -69,8 +62,6 @@
 	X(avg_benmatch_depth)      \
 	X(max_malmatch_depth)      \
 	X(max_benmatch_depth)      \
-	X(malapi_count)            \
-	X(benapi_count)            \
 	X(avg_malchain_weight)     \
 	X(malchain_weight_var)     \
 	X(malchain_weight_ske)     \
@@ -85,8 +76,6 @@
 	X(max_benweight_density)   \
 	X(tspm_mal_weight)         \
 	X(tspm_ben_weight)         \
-	X(weight_diff)             \
-	X(weight_ratio)            \
 	X(avg_malskip_count)       \
 	X(avg_benskip_count)       \
 	X(avg_malchain_branching)  \
@@ -97,7 +86,6 @@
 
 #define PE_FEAT_FIELDS(X)           \
 	X(machine_type)                 \
-	X(is_64bit)                     \
 	X(num_sections)                 \
 	X(time_date_stamp)              \
 	X(has_symbol_table)             \
@@ -146,10 +134,8 @@
 	X(executable_count)             \
 	X(import_count)                 \
 	X(distinct_dll_count)           \
-	X(imports_per_dll_mean)         \
 	X(imports_per_dll_max)          \
 	X(ordinal_import_count)         \
-	X(ordinal_import_ratio)         \
 	X(unique_api_count)             \
 	X(api_name_len_mean)            \
 	X(api_name_len_max)             \
@@ -157,9 +143,7 @@
 	X(dll_name_entropy)             \
 	X(has_dynamic_import)           \
 	X(suspicious_api_count)         \
-	X(suspicious_api_ratio)         \
 	X(suspicious_dll_count)         \
-	X(suspicious_dll_ratio)         \
 	X(process_api_count)            \
 	X(network_api_count)            \
 	X(crypto_api_count)             \
@@ -177,9 +161,6 @@
 	X(suspicious_keyword_count)     \
 	X(file_size)                    \
 	X(overlay_size)                 \
-	X(overlay_ratio)                \
-	X(headers_image_ratio)          \
-	X(image_gap_ratio)              \
 	X(nonzero_data_directory_count) \
 	X(export_present)               \
 	X(debug_present)                \
@@ -200,17 +181,17 @@ static_assert(starlight_v3::PEFeatPack::kFieldCount == starlight_v3::lgbm::kPeFe
 namespace starlight_v3::lgbm {
 
 SIZE_T serialize_feat_pack(const FeatPack &feats, double *out) {
-	// 先序列化EFG特征(39维)
+	// 先序列化EFG特征(36维)
 #define EMIT_EFG_FIELD(name) *out++ = static_cast<double>(feats.efg_feats.name);
 	EFG_FEAT_FIELDS(EMIT_EFG_FIELD)
 #undef EMIT_EFG_FIELD
 
-	// 再序列化TSPM特征(43维)
+	// 再序列化TSPM特征(35维)
 #define EMIT_TSPM_FIELD(name) *out++ = static_cast<double>(feats.tspm_feats.name);
 	TSPM_FEAT_FIELDS(EMIT_TSPM_FIELD)
 #undef EMIT_TSPM_FIELD
 
-	// 最后序列化PE特征(89维)
+	// 最后序列化PE特征(81维)
 #define EMIT_PE_FIELD(name) *out++ = static_cast<double>(feats.pe_feats.name);
 	PE_FEAT_FIELDS(EMIT_PE_FIELD)
 #undef EMIT_PE_FIELD

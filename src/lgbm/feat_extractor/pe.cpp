@@ -688,10 +688,9 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 	}
 	ParsedPEGuard pe_guard(pe); // RAII: 任何退出路径(含异常)都释放pe-parse分配的内存
 
-	// PE头特征(29维)
+	// PE头特征(28维)
 	const peparse::file_header &file_header = pe->peHeader.nt.FileHeader;
 	feats.machine_type = file_header.Machine;
-	feats.is_64bit = (pe->peHeader.nt.OptionalMagic == 0x20b) || (file_header.Machine == 0x8664);
 	feats.num_sections = file_header.NumberOfSections;
 	feats.time_date_stamp = file_header.TimeDateStamp;
 	feats.has_symbol_table = file_header.PointerToSymbolTable != 0;
@@ -930,10 +929,8 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 		}
 
 		SIZE_T dll_count = (SIZE_T)dll_freq.size();
-		SIZE_T dll_import_sum = 0;
 		SIZE_T dll_import_max = 0;
 		for (auto &entry : dll_freq) {
-			dll_import_sum += entry.second;
 			if (entry.second > dll_import_max) {
 				dll_import_max = entry.second;
 			}
@@ -944,10 +941,8 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 
 		feats.import_count = import_count;
 		feats.distinct_dll_count = dll_count;
-		feats.imports_per_dll_mean = dll_count > 0 ? (double)dll_import_sum / (double)dll_count : 0.0;
 		feats.imports_per_dll_max = dll_import_max;
 		feats.ordinal_import_count = ordinal_count;
-		feats.ordinal_import_ratio = (double)ordinal_count / (double)import_count;
 		feats.unique_api_count = (SIZE_T)unique_apis.size();
 		feats.api_name_len_mean = named_import_count > 0 ? (double)name_len_sum / (double)named_import_count : 0.0;
 		feats.api_name_len_max = name_len_max;
@@ -955,9 +950,7 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 		feats.dll_name_entropy = entropy_from_distribution(dll_freq, import_count);
 		feats.has_dynamic_import = has_dynamic;
 		feats.suspicious_api_count = suspicious_count;
-		feats.suspicious_api_ratio = (double)suspicious_count / (double)import_count;
 		feats.suspicious_dll_count = suspicious_dll_count;
-		feats.suspicious_dll_ratio = dll_count > 0 ? (double)suspicious_dll_count / (double)dll_count : 0.0;
 		feats.process_api_count = process_count;
 		feats.network_api_count = network_count;
 		feats.crypto_api_count = crypto_count;
@@ -965,7 +958,7 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 	}
 	feats.import_dir_size = opt.valid ? opt.dirs[peparse::DIR_IMPORT].Size : 0;
 
-	// 结构统计特征(10维) + 整文件熵
+	// 结构统计特征(7维) + 整文件熵
 	uint64_t file_size = 0;
 	if (pe->fileBuffer != nullptr) {
 		file_size = pe->fileBuffer->bufLen;
@@ -975,12 +968,6 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 		? shannon_entropy(pe->fileBuffer->buf, (size_t)file_size)
 		: 0.0;
 	feats.overlay_size = file_size > raw_end_max ? (GREAT_SIZE_T)(file_size - raw_end_max) : 0;
-	feats.overlay_ratio = file_size > 0 ? (double)feats.overlay_size / (double)file_size : 0.0;
-	feats.headers_image_ratio = (opt.valid && opt.size_of_image > 0) ? (double)opt.size_of_headers / (double)opt.size_of_image : 0.0;
-	if (opt.valid && opt.size_of_image > 0) {
-		double gap = (double)opt.size_of_image - (double)virtual_size_sum;
-		feats.image_gap_ratio = gap > 0.0 ? gap / (double)opt.size_of_image : 0.0;
-	}
 	if (opt.valid) {
 		SIZE_T nonzero_dir_count = 0;
 		SIZE_T dir_count = std::min(opt.number_of_rva_and_sizes, (uint32_t)16);
