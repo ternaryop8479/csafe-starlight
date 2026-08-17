@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
 #include <memory>
 #include <queue>
 #include <string>
@@ -82,6 +83,7 @@ struct PEParser::Impl {
 	uint64_t entry_point_rva_ = 0; ///< 程序入口点RVA(由入口VA减去镜像基址得到)
 	uint64_t image_base_ = 0; ///< 镜像基址(PE32+为64位, 详见parse())
 	bool is_64bit_ = false; ///< 是否为PE32+(64位)格式
+	std::vector<std::uint8_t> workaround_data_; ///< 修补副本缓冲区(workaround路径时持有文件字节, 存活至对象析构)
 
 	static int import_callback(void *ctx, const peparse::VA &va,
 		const std::string &module,
@@ -90,6 +92,8 @@ struct PEParser::Impl {
 		const std::string &sec_name,
 		const peparse::image_section_header &sec,
 		const peparse::bounded_buffer *sec_data);
+
+	peparse::parsed_pe *parse_with_debug_workaround(); ///< 修补debug空条目后重试解析
 };
 
 // 导入表回调，将导入信息存入Impl对象
@@ -143,8 +147,16 @@ PEParser::~PEParser() {
 bool PEParser::parse() {
 	// 解析PE文件, 失败(非PE或严重损坏)直接返回false
 	impl_->pe_ = peparse::ParsePEFromFile(impl_->file_path_.c_str());
-	if (!impl_->pe_)
-		return false;
+	if (!impl_->pe_) {
+		// 兼容修复: pe-parse对debug目录中"空条目"(SizeOfData=0且AddressOfRawData=0但
+		// PointerToRawData!=0)处理有缺陷——它不满足全零break条件, 却把AddressOfRawData=0
+		// 换算成RVA 0(ImageBase处)再去查段, 必然失败导致整个文件被拒。此类空条目常见于
+		// .NET程序集的可复现构建标记(type=16)。修补: 将此类条目的PointerToRawData清零,
+		// 使pe-parse的break条件(三个字段全零)提前生效, 再用缓冲区重试解析。
+		impl_->pe_ = impl_->parse_with_debug_workaround();
+		if (!impl_->pe_)
+			return false;
+	}
 
 	// 获取入口点虚拟地址
 	peparse::VA entry_va = 0;
@@ -176,10 +188,103 @@ bool PEParser::parse() {
 	return true;
 }
 
+// 解析修复: 首次ParsePEFromFile失败时调用.
+// pe-parse的getDebugDir对debug目录条目的break条件是三个字段(SizeOfData/AddressOfRawData/
+// PointerToRawData)全零; 但".NET可复现构建"空条目(type=16)只有SizeOfData和AddressOfRawData为0,
+// PointerToRawData非0, 导致pe-parse不break却把AddressOfRawData(0)+ImageBase(即RVA 0)拿去查段,
+// 必然失败并拒绝整个文件. 这里把此类空条目的PointerToRawData清零, 使break条件满足后重试.
+peparse::parsed_pe *PEParser::Impl::parse_with_debug_workaround() {
+	// 注意: 不能使用peparse::readFileToFileBuffer——它对文件做PROT_READ+MAP_SHARED映射,
+	// 对映射区写入会触发SIGSEGV(且MAP_SHARED会回写源文件). 这里用ifstream读到自有缓冲区再修补.
+	std::ifstream ifs(file_path_, std::ios::binary);
+	if (!ifs)
+		return nullptr;
+	ifs.seekg(0, std::ios::end);
+	const std::streamoff file_size = ifs.tellg();
+	if (file_size <= 0)
+		return nullptr;
+	ifs.seekg(0, std::ios::beg);
+	workaround_data_.resize(static_cast<size_t>(file_size));
+	ifs.read(reinterpret_cast<char *>(workaround_data_.data()),
+		static_cast<std::streamsize>(file_size));
+	if (ifs.gcount() != file_size)
+		return nullptr;
+	std::uint8_t *raw = workaround_data_.data();
+	const std::uint32_t raw_len = static_cast<std::uint32_t>(workaround_data_.size());
+
+	// MZ校验
+	if (raw_len < 0x40 || raw[0] != 'M' || raw[1] != 'Z')
+		return nullptr;
+
+	// e_lfanew -> PE头偏移
+	const std::uint32_t lfanew = *reinterpret_cast<const std::uint32_t *>(raw + 0x3c);
+	if (lfanew + 4 + 20 + 2 > raw_len)
+		return nullptr;
+	std::uint8_t *pe_base = raw + lfanew;
+	if (std::memcmp(pe_base, "PE\0\0", 4) != 0)
+		return nullptr;
+
+	// COFF头: Machine(2) NumberOfSections(2) 后接OptionalHeader
+	const std::uint32_t opt_off = 4 + 20;
+	const std::uint16_t num_sections = *reinterpret_cast<const std::uint16_t *>(pe_base + 4 + 2);
+	const std::uint16_t opt_magic = *reinterpret_cast<const std::uint16_t *>(pe_base + opt_off);
+	const bool is_64 = (opt_magic == 0x20b);
+	const std::uint32_t opt_header_size = is_64 ? 112 : 96; // 到DataDirectory为止的偏移
+	const std::uint32_t dd_off = opt_off + opt_header_size + 6 * 8; // Debug目录=索引6
+	if (lfanew + dd_off + 8 > raw_len)
+		return nullptr;
+
+	std::uint32_t dbg_rva = *reinterpret_cast<const std::uint32_t *>(pe_base + dd_off);
+	const std::uint32_t dbg_size = *reinterpret_cast<const std::uint32_t *>(pe_base + dd_off + 4);
+	if (dbg_size == 0)
+		return nullptr;
+
+	// 定位debug目录所在节, 换算文件偏移
+	const std::uint32_t sec_off = opt_off + (is_64 ? 240 : 224);
+	if (lfanew + sec_off + num_sections * 40 > raw_len)
+		return nullptr;
+	const std::uint8_t *sec_table = pe_base + sec_off;
+	int dbg_sec_idx = -1;
+	for (std::uint16_t i = 0; i < num_sections; ++i) {
+		const std::uint8_t *sh = sec_table + i * 40;
+		const std::uint32_t va = *reinterpret_cast<const std::uint32_t *>(sh + 12);
+		const std::uint32_t vsz = *reinterpret_cast<const std::uint32_t *>(sh + 8);
+		if (dbg_rva >= va && dbg_rva < va + vsz) {
+			dbg_sec_idx = i;
+			break;
+		}
+	}
+	if (dbg_sec_idx < 0)
+		return nullptr;
+
+	const std::uint8_t *sh = sec_table + dbg_sec_idx * 40;
+	const std::uint32_t raw_off = *reinterpret_cast<const std::uint32_t *>(sh + 20); // PointerToRawData
+	const std::uint32_t dbg_file_off = raw_off + (dbg_rva - *reinterpret_cast<const std::uint32_t *>(sh + 12));
+	if (dbg_file_off + dbg_size > raw_len)
+		return nullptr;
+
+	// 逐条目修补: SizeOfData=0 && AddressOfRawData=0 && PointerToRawData!=0 -> PointerToRawData清零
+	// 条目布局: Characteristics(4) TimeStamp(4) Major(2) Minor(2) Type(4) SizeOfData(4) AddressOfRawData(4) PointerToRawData(4) = 28字节
+	const std::uint32_t entry_size = 28;
+	for (std::uint32_t i = 0; i + entry_size <= dbg_size; i += entry_size) {
+		std::uint8_t *ent = raw + dbg_file_off + i;
+		const std::uint32_t size_of_data = *reinterpret_cast<const std::uint32_t *>(ent + 16);
+		const std::uint32_t addr_of_raw = *reinterpret_cast<const std::uint32_t *>(ent + 20);
+		const std::uint32_t ptr_to_raw = *reinterpret_cast<const std::uint32_t *>(ent + 24);
+		if (size_of_data == 0 && addr_of_raw == 0 && ptr_to_raw != 0) {
+			*reinterpret_cast<std::uint32_t *>(ent + 24) = 0;
+		}
+	}
+
+	// 用修补后的缓冲区重试: makeBufferFromPointer不拷贝数据也不负责释放(copy=true),
+	// 数据由workaround_data_持有至本对象析构, 生命周期覆盖ParsePEFromBuffer的整个使用期
+	return peparse::ParsePEFromBuffer(peparse::makeBufferFromPointer(
+		raw, raw_len));
+}
+
 const std::vector<ImportInfo> &PEParser::get_imports() const {
 	return impl_->imports_;
 }
-
 const std::vector<CodeSection> &PEParser::get_exec_sections() const {
 	return impl_->exec_sections_;
 }
@@ -314,8 +419,11 @@ void EFGBuilder::Impl::build_global_efg() {
 	};
 
 	std::queue<State> worklist;
-	// 从入口点开始, prev_api初始为ENTRY节点
-	worklist.push({ parser_.get_entry_point(), ENTRY_NODE_RVA, {} });
+	// 从所有可执行段起点开始遍历(不依赖入口点: 合法DLL可能无入口函数, 且全段覆盖可含导出函数代码),
+	// 每段起点均以ENTRY节点为prev_api, visited_states去重保证跨段重叠时不会重复处理
+	for (const auto &sec : parser_.get_exec_sections()) {
+		worklist.push({ sec.base_rva_, ENTRY_NODE_RVA, {} });
+	}
 
 	// 去重表: 以打包键(rva, prev_api)记录组合是否已处理, 防止无限循环
 	std::unordered_set<GREAT_SIZE_T> visited_states;
@@ -779,12 +887,8 @@ std::pair<bool, EFG> generate_efg(const std::string &file_path) {
 		return { false, EFG {} };
 	}
 
-	// 无可执行段或入口无效则无法构建调用图, 返回空EFG
-	if (parser.get_exec_sections().empty() || parser.get_entry_point() == 0) {
-		return { false, EFG {} };
-	}
-
-	// 构建EFG: 反汇编遍历控制流, 提取节点与边
+	// 无可执行段则不构建调用图, 但文件本身是合法PE(如纯资源DLL), 返回仅含ENTRY节点的空EFG
+	// 让上游能正常提取静态PE特征兜底, 而非整体拒绝(避免纯资源DLL频繁扫描失败)
 	EFGBuilder builder(parser);
 	EFG efg = builder.build();
 
