@@ -165,7 +165,17 @@
 	X(export_present)               \
 	X(debug_present)                \
 	X(resource_present)             \
-	X(rich_header_entry_count)
+	X(rich_header_entry_count)         \
+	X(is_dotnet)                       \
+	X(clr_header_size)                 \
+	X(clr_metadata_rva)                \
+	X(clr_metadata_size)               \
+	X(is_upx)                          \
+	X(is_vmprotect)                    \
+	X(is_themida)                      \
+	X(is_aspack)                       \
+	X(is_mpress)                       \
+	X(packer_section_count)
 
 // 用于编译期统计维度数的宏
 #define FEAT_COUNT_ONE(name) +1
@@ -191,7 +201,7 @@ SIZE_T serialize_feat_pack(const FeatPack &feats, double *out) {
 	TSPM_FEAT_FIELDS(EMIT_TSPM_FIELD)
 #undef EMIT_TSPM_FIELD
 
-	// 最后序列化PE特征(81维)
+	// 最后序列化PE特征(91维)
 #define EMIT_PE_FIELD(name) *out++ = static_cast<double>(feats.pe_feats.name);
 	PE_FEAT_FIELDS(EMIT_PE_FIELD)
 #undef EMIT_PE_FIELD

@@ -116,7 +116,7 @@ struct EFGFeatPack {
 };
 
 /**
- * @brief 来自程序PE文件的结构化统计特征(共81维)
+ * @brief 来自程序PE文件的结构化统计特征(共91维)
  */
 struct PEFeatPack {
 	// PE头数据特征(28维)
@@ -212,8 +212,22 @@ struct PEFeatPack {
 	bool resource_present; ///< 是否存在资源目录
 	SIZE_T rich_header_entry_count; ///< Rich Header条目数(编译器指纹)
 
+	// CLR/.NET特征(4维)
+	bool is_dotnet; ///< 是否存在CLR头(COM描述符目录非零)
+	SIZE_T clr_header_size; ///< CLR头大小(COM描述符目录Size)
+	SIZE_T clr_metadata_rva; ///< CLR元数据RVA(IMAGE_COR20_HEADER.MetaData.VirtualAddress)
+	SIZE_T clr_metadata_size; ///< CLR元数据大小(IMAGE_COR20_HEADER.MetaData.Size)
+
+	// 壳指纹特征(6维)
+	bool is_upx; ///< UPX壳(节名UPX0/UPX1或文件含"UPX!"签名)
+	bool is_vmprotect; ///< VMProtect壳(.vmp0/.vmp1节名或文件含"VMProtect"签名)
+	bool is_themida; ///< Themida/WinLicense壳(.themida节名或文件含"Themida"/"WinLicense"签名)
+	bool is_aspack; ///< ASPack壳(.aspack节名或文件含"ASPack"签名)
+	bool is_mpress; ///< MPRESS壳(.mpress1节名或文件含"MPRESS"签名)
+	SIZE_T packer_section_count; ///< 命中已知壳节名前缀的节段数(综合信号)
+
 	// 结构体字段数, 与feat_vector.cpp中PE_FEAT_FIELDS宏的维度数编译期对齐, 防止字段遗漏
-	static constexpr SIZE_T kFieldCount = 81;
+	static constexpr SIZE_T kFieldCount = 91;
 };
 
 /**

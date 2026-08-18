@@ -252,6 +252,29 @@ const std::vector<std::string_view> STRING_KEYWORDS = {
 	"SetWindowsHookEx",
 };
 
+// 已知加壳工具的特征节名前缀，命中即视为加壳信号
+const std::vector<std::string_view> PACKER_SECTION_PREFIXES = {
+	"UPX0",
+	"UPX1",
+	"UPX2",
+	".vmp0",
+	".vmp1",
+	".themida",
+	".aspack",
+	".mpress1",
+};
+
+// 已知加壳工具在文件字节中的魔数签名(大小写不敏感子串匹配)
+const std::vector<std::string_view> PACKER_MAGIC_SIGNATURES = {
+	"UPX!",
+	"VMProtect",
+	"Themida",
+	"WinLicense",
+	"ASPack",
+	"MPRESS",
+	"MPRESS~1",
+};
+
 // 字符串工具
 // ASCII大小写不敏感字符比较
 inline bool ieq_char(char a, char b) {
@@ -275,6 +298,41 @@ bool icontains(std::string_view haystack, std::string_view needle) {
 			}
 		}
 		if (matched) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// 判断字符是否为词字符(字母/数字/下划线)
+bool is_word_char(char c) {
+	const unsigned char u = (unsigned char)c;
+	return (u >= 'a' && u <= 'z') || (u >= 'A' && u <= 'Z') || (u >= '0' && u <= '9') || u == '_';
+}
+
+// 判断haystack是否包含needle且匹配位置前后都不是词字符(ASCII大小写不敏感):
+// 避免子串误命中常见词, 如"CoMPRESSion"含"MPRESS"、"fileupX00"含"UPX0"等
+bool contains_word(std::string_view haystack, std::string_view needle) {
+	if (needle.empty()) {
+		return true;
+	}
+	if (needle.size() > haystack.size()) {
+		return false;
+	}
+	for (SIZE_T i = 0; i + needle.size() <= haystack.size(); ++i) {
+		bool matched = true;
+		for (SIZE_T j = 0; j < needle.size(); ++j) {
+			if (!ieq_char(haystack[i + j], needle[j])) {
+				matched = false;
+				break;
+			}
+		}
+		if (!matched) {
+			continue;
+		}
+		const bool before_ok = (i == 0) || !is_word_char(haystack[i - 1]);
+		const bool after_ok = (i + needle.size() >= haystack.size()) || !is_word_char(haystack[i + needle.size()]);
+		if (before_ok && after_ok) {
 			return true;
 		}
 	}
@@ -641,6 +699,16 @@ int section_callback(void *ctx, const peparse::VA &, const std::string &sec_name
 	return 0;
 }
 
+// 将RVA转换为文件偏移: 遍历节段定位包含该RVA的节段，未命中或非法时返回0
+uint64_t rva_to_file_offset(uint64_t rva, const std::vector<SectionInfo> &sections) {
+	for (const SectionInfo &sec : sections) {
+		if (rva >= sec.virtual_address && rva < (uint64_t)sec.virtual_address + sec.virtual_size) {
+			return (uint64_t)sec.pointer_to_raw + (rva - sec.virtual_address);
+		}
+	}
+	return 0;
+}
+
 // 导入信息
 struct ImportInfo {
 	std::string dll;
@@ -794,6 +862,13 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 		}
 		if (!is_standard) {
 			++nonstandard_count;
+		}
+		// 统计命中已知壳节名前缀的节段数
+		for (auto &prefix : PACKER_SECTION_PREFIXES) {
+			if (sec.name.compare(0, prefix.size(), prefix) == 0) {
+				++feats.packer_section_count;
+				break;
+			}
 		}
 		// 特征位统计
 		if ((sec.characteristics & IMAGE_SCN_MEM_EXECUTE) != 0) {
@@ -983,6 +1058,45 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 	}
 	const peparse::rich_header &rich = pe->peHeader.rich;
 	feats.rich_header_entry_count = (rich.isPresent && rich.isValid) ? (SIZE_T)rich.Entries.size() : 0;
+
+	// CLR/.NET特征(4维): COM描述符目录(数据目录索引14)非零即为.NET程序
+	if (opt.valid) {
+		const peparse::data_directory &clr_dir = opt.dirs[peparse::DIR_COM_DESCRIPTOR];
+		feats.is_dotnet = clr_dir.VirtualAddress != 0;
+		feats.clr_header_size = clr_dir.Size;
+		// 解析IMAGE_COR20_HEADER: 偏移+8处为MetaData数据目录(RVA+Size)，需RVA转文件偏移并做越界检查
+		if (feats.is_dotnet && pe->fileBuffer != nullptr && pe->fileBuffer->buf != nullptr) {
+			uint64_t clr_off = rva_to_file_offset(clr_dir.VirtualAddress, sections);
+			uint64_t file_len = pe->fileBuffer->bufLen;
+			if (clr_off != 0 && clr_off + 16 <= file_len) {
+				const uint8_t *clr = pe->fileBuffer->buf + clr_off;
+				feats.clr_metadata_rva = (SIZE_T)(clr[8] | ((uint32_t)clr[9] << 8) | ((uint32_t)clr[10] << 16) | ((uint32_t)clr[11] << 24));
+				feats.clr_metadata_size = (SIZE_T)(clr[12] | ((uint32_t)clr[13] << 8) | ((uint32_t)clr[14] << 16) | ((uint32_t)clr[15] << 24));
+			}
+		}
+	}
+
+	// 壳指纹特征(6维): 在文件字节中搜索壳魔数签名(节名统计已在节段循环中完成)
+	if (pe->fileBuffer != nullptr && pe->fileBuffer->buf != nullptr && pe->fileBuffer->bufLen > 0) {
+		std::string_view file_bytes((const char *)pe->fileBuffer->buf, pe->fileBuffer->bufLen);
+		for (auto &sig : PACKER_MAGIC_SIGNATURES) {
+			bool found = contains_word(file_bytes, sig);
+			if (!found) {
+				continue;
+			}
+			if (sig == "UPX!") {
+				feats.is_upx = true;
+			} else if (sig == "VMProtect") {
+				feats.is_vmprotect = true;
+			} else if (sig == "Themida" || sig == "WinLicense") {
+				feats.is_themida = true;
+			} else if (sig == "ASPack") {
+				feats.is_aspack = true;
+			} else {
+				feats.is_mpress = true;
+			}
+		}
+	}
 
 	return feats;
 }

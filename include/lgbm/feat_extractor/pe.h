@@ -16,9 +16,9 @@
 namespace starlight_v3::lgbm {
 
 /**
- * @brief 从PE文件中提取静态特征(89维)
+ * @brief 从PE文件中提取静态特征(91维)
  * @param file_path 目标PE文件路径
- * @return 提取出的89维特征
+ * @return 提取出的91维特征
  */
 PEFeatPack extract_pe_feats(const std::string &file_path);
 
