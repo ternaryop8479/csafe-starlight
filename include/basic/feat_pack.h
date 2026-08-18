@@ -8,6 +8,8 @@
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_BASIC_FEAT_PACK_H
 #define CSAFE_STARLIGHT_V3_INCLUDE_BASIC_FEAT_PACK_H
 
+#include <array>
+
 #include "types.h"
 
 namespace starlight_v3 {
@@ -231,7 +233,20 @@ struct PEFeatPack {
 };
 
 /**
- * @brief 所有维度的特征集合(共152维)
+ * @brief 来自文件原始字节分布的特征数据(272维)
+ */
+struct ByteHistFeatPack {
+	// 字节分布特征(256维)
+	std::array<double, 256> byte_hist; ///< 1-gram字节直方图, 每维=log1p(256*概率), 与文件大小解耦
+	// 分块熵特征(16维)
+	std::array<double, 16> block_entropy; ///< 全文件按字节数均分16块, 每块Shannon熵
+
+	// 结构体字段数, 与feat_vector.cpp中BYTE_HIST_FEAT_FIELDS宏的维度数编译期对齐, 防止字段遗漏
+	static constexpr SIZE_T kFieldCount = 256 + 16;
+};
+
+/**
+ * @brief 所有维度的特征集合(共434维)
  */
 struct FeatPack {
 	// 来自tosSPM引擎推理过程及结果的特征数据
@@ -242,6 +257,9 @@ struct FeatPack {
 
 	// 从PE文件中提取出的静态特征数据
 	PEFeatPack pe_feats;
+
+	// 从文件原始字节中提取出的分布特征数据
+	ByteHistFeatPack byte_hist_feats;
 };
 
 }

@@ -747,7 +747,7 @@ private:
 namespace starlight_v3::lgbm {
 
 // PE特征提取主函数
-PEFeatPack extract_pe_feats(const std::string &file_path) {
+PEFeatPack extract_pe_feats(const std::string &file_path, ByteHistFeatPack *byte_hist_out) {
 	PEFeatPack feats = {}; // 值初始化, 提取失败的部分保持全零
 
 	peparse::parsed_pe *pe = peparse::ParsePEFromFile(file_path.c_str());
@@ -1096,6 +1096,11 @@ PEFeatPack extract_pe_feats(const std::string &file_path) {
 				feats.is_mpress = true;
 			}
 		}
+	}
+
+	// 同步提取字节分布特征，复用本次PE解析的文件字节，避免重复读盘
+	if (byte_hist_out != nullptr && pe->fileBuffer != nullptr && pe->fileBuffer->buf != nullptr) {
+		*byte_hist_out = extract_byte_hist_feats(pe->fileBuffer->buf, pe->fileBuffer->bufLen);
 	}
 
 	return feats;

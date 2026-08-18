@@ -169,7 +169,7 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					// 依旧好孩子要注意释放内存
 					result.evidence_trees.clear();
 					result.evidence_trees.shrink_to_fit();
-					feats.pe_feats = lgbm::extract_pe_feats(sample.file_path);
+					feats.pe_feats = lgbm::extract_pe_feats(sample.file_path, &feats.byte_hist_feats);
 					lgbm::serialize_feat_pack(feats, feature_matrix.data() + idx * lgbm::kTotalFeatDims);
 				} catch (const std::exception &e) {
 					// 线程池会吞掉任务异常, 这里显式上报防止该样本特征静默全零进入训练
@@ -197,7 +197,7 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					// 释放内存
 					result.evidence_trees.clear();
 					result.evidence_trees.shrink_to_fit();
-					feats.pe_feats = lgbm::extract_pe_feats(sample.file_path);
+					feats.pe_feats = lgbm::extract_pe_feats(sample.file_path, &feats.byte_hist_feats);
 					lgbm::serialize_feat_pack(feats, feature_matrix.data() + (mal_count + idx) * lgbm::kTotalFeatDims);
 				} catch (const std::exception &e) {
 					++feature_fail_count;

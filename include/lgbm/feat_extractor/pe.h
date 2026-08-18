@@ -12,15 +12,17 @@
 #include <string>
 
 #include "basic/feat_pack.h"
+#include "lgbm/feat_extractor/byte_hist.h"
 
 namespace starlight_v3::lgbm {
 
 /**
  * @brief 从PE文件中提取静态特征(91维)
  * @param file_path 目标PE文件路径
+ * @param byte_hist_out 可选输出参数: 非空时同步填充字节直方图特征(复用同一次PE解析的文件字节, 零额外磁盘I/O)
  * @return 提取出的91维特征
  */
-PEFeatPack extract_pe_feats(const std::string &file_path);
+PEFeatPack extract_pe_feats(const std::string &file_path, ByteHistFeatPack *byte_hist_out = nullptr);
 
 } // namespace starlight_v3::lgbm
 

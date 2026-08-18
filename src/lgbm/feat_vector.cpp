@@ -165,17 +165,22 @@
 	X(export_present)               \
 	X(debug_present)                \
 	X(resource_present)             \
-	X(rich_header_entry_count)         \
-	X(is_dotnet)                       \
-	X(clr_header_size)                 \
-	X(clr_metadata_rva)                \
-	X(clr_metadata_size)               \
-	X(is_upx)                          \
-	X(is_vmprotect)                    \
-	X(is_themida)                      \
-	X(is_aspack)                       \
-	X(is_mpress)                       \
+	X(rich_header_entry_count)      \
+	X(is_dotnet)                    \
+	X(clr_header_size)              \
+	X(clr_metadata_rva)             \
+	X(clr_metadata_size)            \
+	X(is_upx)                       \
+	X(is_vmprotect)                 \
+	X(is_themida)                   \
+	X(is_aspack)                    \
+	X(is_mpress)                    \
 	X(packer_section_count)
+
+// 字节分布特征宏列表(数组字段: X(字段名, 元素数))
+#define BYTE_HIST_FEAT_FIELDS(X) \
+	X(byte_hist, 256)            \
+	X(block_entropy, 16)
 
 // 用于编译期统计维度数的宏
 #define FEAT_COUNT_ONE(name) +1
@@ -187,6 +192,12 @@ static_assert(starlight_v3::EFGFeatPack::kFieldCount == starlight_v3::lgbm::kEfg
 static_assert(starlight_v3::TSPMFeatPack::kFieldCount == starlight_v3::lgbm::kTspmFeatDims, "TSPMFeatPack got new fields but TSPM_FEAT_FIELDS macro not synced");
 static_assert(starlight_v3::PEFeatPack::kFieldCount == starlight_v3::lgbm::kPeFeatDims, "PEFeatPack got new fields but PE_FEAT_FIELDS macro not synced");
 #undef FEAT_COUNT_ONE
+
+// 数组字段维度计数(每个数组按元素数计入)
+#define BH_FEAT_COUNT(name, count) +count
+static_assert(0 BYTE_HIST_FEAT_FIELDS(BH_FEAT_COUNT) == starlight_v3::lgbm::kByteHistFeatDims, "ByteHistFeatPack field count does not match BYTE_HIST_FEAT_FIELDS macro");
+static_assert(starlight_v3::ByteHistFeatPack::kFieldCount == starlight_v3::lgbm::kByteHistFeatDims, "ByteHistFeatPack got new fields but BYTE_HIST_FEAT_FIELDS macro not synced");
+#undef BH_FEAT_COUNT
 
 namespace starlight_v3::lgbm {
 
@@ -201,10 +212,17 @@ SIZE_T serialize_feat_pack(const FeatPack &feats, double *out) {
 	TSPM_FEAT_FIELDS(EMIT_TSPM_FIELD)
 #undef EMIT_TSPM_FIELD
 
-	// 最后序列化PE特征(91维)
+	// 再序列化PE特征(91维)
 #define EMIT_PE_FIELD(name) *out++ = static_cast<double>(feats.pe_feats.name);
 	PE_FEAT_FIELDS(EMIT_PE_FIELD)
 #undef EMIT_PE_FIELD
+
+	// 最后序列化字节分布特征(272维)
+#define EMIT_BH_FIELD(name, count)                        \
+	for (SIZE_T bh_i = 0; bh_i < (count); ++bh_i)         \
+		*out++ = static_cast<double>(feats.byte_hist_feats.name[bh_i]);
+	BYTE_HIST_FEAT_FIELDS(EMIT_BH_FIELD)
+#undef EMIT_BH_FIELD
 
 	return kTotalFeatDims;
 }
@@ -215,3 +233,4 @@ SIZE_T serialize_feat_pack(const FeatPack &feats, double *out) {
 #undef EFG_FEAT_FIELDS
 #undef TSPM_FEAT_FIELDS
 #undef PE_FEAT_FIELDS
+#undef BYTE_HIST_FEAT_FIELDS

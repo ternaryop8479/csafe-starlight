@@ -146,17 +146,17 @@ AnalysisResult Reasoner::analyze_efg(const EFG &efg) {
 	return result;
 }
 
-// 对已知EFG进行分析(提取完整171维特征)
+// 对已知EFG进行分析(提取完整434维特征)
 AnalysisResult Reasoner::analyze_efg(const EFG &efg, const std::string &file_path) {
-	AnalysisResult result = {}; // 值初始化, 三个特征组全部清零
+	AnalysisResult result = {}; // 值初始化, 四个特征组全部清零
 
 	// tosSPM推理(记录证据树, 供特征提取与DOT导出使用)
 	result.tspm_result = tspm_reasoner_.analyze_efg(efg, true);
 
-	// 提取特征: EFG特征 + TSPM特征 + PE特征
+	// 提取特征: EFG特征 + TSPM特征 + PE特征 + 字节分布特征
 	result.feats.efg_feats = lgbm::extract_efg_feats(efg);
 	result.feats.tspm_feats = lgbm::extract_tspm_feats(result.tspm_result, efg);
-	result.feats.pe_feats = lgbm::extract_pe_feats(file_path);
+	result.feats.pe_feats = lgbm::extract_pe_feats(file_path, &result.feats.byte_hist_feats);
 
 	// LightGBM打分
 	double features[lgbm::kTotalFeatDims];
