@@ -15,3 +15,6 @@ train.conf
 
 # 本地实验记录
 experiments/
+
+# TODO List
+todo.list
