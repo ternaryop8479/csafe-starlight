@@ -12,7 +12,7 @@
  *   dataset_filter <src_dir> <dst_dir> <edgeless_ratio> [thread_count] [max_samples]
  *     src_dir        源文件夹(递归)
  *     dst_dir        目标文件夹(不存在则创建)
- *     edgeless_ratio 目标edgeless占总样本比例, 取值[0,1], 如0.4表示40%样本为edgeless
+ *     edgeless_ratio 目标edgeless占总样本比例, 取值[0,1], 如0.4表示40%样本为edgeless, 0表示不限制比例(全保留)
  *     thread_count   并行线程数, 默认系统并发
  *     max_samples    最大拷贝样本总数, 超出时按比例缩裁, 0或省略为不限制
  */
@@ -91,7 +91,7 @@ struct SampleEntry {
 int main(int argc, char *argv[]) {
 	if (argc < 4) {
 		std::cerr << "用法: " << argv[0] << " <src_dir> <dst_dir> <edgeless_ratio> [thread_count] [max_samples]" << std::endl;
-		std::cerr << "  edgeless_ratio: edgeless样本占总样本比例, 取值[0,1], 如0.4表示40%样本为edgeless" << std::endl;
+		std::cerr << "  edgeless_ratio: edgeless样本占总样本比例, 取值[0,1], 如0.4表示40%样本为edgeless, 0表示不限制比例(全保留)" << std::endl;
 		return -1;
 	}
 	fs::path src_dir = argv[1];
@@ -219,9 +219,9 @@ int main(int argc, char *argv[]) {
 	//    优先保留全部普通样本(普通样本稀缺), 再按比例补足edgeless; 若edgeless过多则裁掉edgeless
 	//    当无法通过两类样本的组合达到目标比例时(某类完全缺失), 拒绝产出比例失真的数据集, 输出为空
 	size_t keep_edgeless = 0, keep_normal = 0;
-	if (target_ratio == 0.0) {
-		// 全要普通
-		keep_edgeless = 0;
+	if (starlight_v3::near_zero(target_ratio)) {
+		// 不限制edgeless比例, 两类样本全保留, 实际比例由数据集本身决定
+		keep_edgeless = e_count;
 		keep_normal = n_count;
 	} else if (target_ratio == 1.0) {
 		// 全要edgeless
