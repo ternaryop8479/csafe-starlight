@@ -207,6 +207,7 @@ add_library(starlight_v3_lib STATIC
 	src/reasoner.cpp
 	src/trainer.cpp
 	src/efg_generator.cpp
+	src/pe_compat.cpp
 	src/basic/api_table.cpp
 	src/tspm/reasoner.cpp
 	src/tspm/trainer.cpp

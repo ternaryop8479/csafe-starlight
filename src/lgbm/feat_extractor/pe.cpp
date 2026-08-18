@@ -20,6 +20,7 @@
 #include <pe-parse/nt-headers.h>
 #include <pe-parse/parse.h>
 
+#include "basic/pe_compat.h"
 #include "basic/types.h"
 #include "lgbm/feat_extractor/pe.h"
 
@@ -727,7 +728,9 @@ int import_callback(void *ctx, const peparse::VA &, const std::string &module, c
 // parsed_pe的RAII守卫, 任何退出路径(含异常)都会释放pe-parse分配的内存
 class ParsedPEGuard {
 public:
-	explicit ParsedPEGuard(peparse::parsed_pe *pe) : pe_(pe) {
+	// pe_compat参数: 走兼容修补路径时持有文件字节，必须存活至DestructParsedPE之后
+	explicit ParsedPEGuard(peparse::parsed_pe *pe, const starlight_v3::ParsedPECompat &pe_compat)
+		: pe_(pe), pe_compat_(pe_compat) {
 	}
 	~ParsedPEGuard() {
 		if (pe_ != nullptr) {
@@ -739,6 +742,7 @@ public:
 
 private:
 	peparse::parsed_pe *pe_;
+	starlight_v3::ParsedPECompat pe_compat_; // 注意: 需要拷贝以延长文件字节生命周期，数据量最多一个文件大小
 };
 
 } // namespace
@@ -749,11 +753,13 @@ namespace starlight_v3::lgbm {
 PEFeatPack extract_pe_feats(const std::string &file_path, ByteHistFeatPack *byte_hist_out) {
 	PEFeatPack feats = {}; // 值初始化, 提取失败的部分保持全零
 
-	peparse::parsed_pe *pe = peparse::ParsePEFromFile(file_path.c_str());
-	if (pe == nullptr) {
+	// 兼容解析: 首次解析失败时自动修补pe-parse已知缺陷(无数据段目录/空debug条目)后重试
+	ParsedPECompat pe_compat = parse_pe_with_compat(file_path);
+	if (pe_compat.pe == nullptr) {
 		return feats; // 非PE格式或损坏到无意义, 返回全零
 	}
-	ParsedPEGuard pe_guard(pe); // RAII: 任何退出路径(含异常)都释放pe-parse分配的内存
+	ParsedPEGuard pe_guard(pe_compat.pe, pe_compat); // RAII: 任何退出路径(含异常)都释放pe-parse分配的内存
+	peparse::parsed_pe *pe = pe_compat.pe;
 
 	// PE头特征(28维)
 	const peparse::file_header &file_header = pe->peHeader.nt.FileHeader;
@@ -1064,7 +1070,7 @@ PEFeatPack extract_pe_feats(const std::string &file_path, ByteHistFeatPack *byte
 		feats.is_dotnet = clr_dir.VirtualAddress != 0;
 		feats.clr_header_size = clr_dir.Size;
 		// 解析IMAGE_COR20_HEADER: 偏移+8处为MetaData数据目录(RVA+Size)，需RVA转文件偏移并做越界检查
-		if (feats.is_dotnet && pe->fileBuffer != nullptr && pe->fileBuffer->buf != nullptr) {
+	if (feats.is_dotnet && pe->fileBuffer != nullptr && pe->fileBuffer->buf != nullptr) {
 			uint64_t clr_off = rva_to_file_offset(clr_dir.VirtualAddress, sections);
 			uint64_t file_len = pe->fileBuffer->bufLen;
 			if (clr_off != 0 && clr_off + 16 <= file_len) {
