@@ -90,7 +90,7 @@ struct SampleEntry {
 
 int main(int argc, char *argv[]) {
 	if (argc < 4) {
-		std::cerr << "用法: " << argv[0] << " <src_dir> <dst_dir> <edgeless_ratio> [thread_count]" << std::endl;
+		std::cerr << "用法: " << argv[0] << " <src_dir> <dst_dir> <edgeless_ratio> [thread_count] [max_samples]" << std::endl;
 		std::cerr << "  edgeless_ratio: edgeless样本占总样本比例, 取值[0,1], 如0.4表示40%样本为edgeless" << std::endl;
 		return -1;
 	}
