@@ -669,13 +669,13 @@ OptView make_opt_view(const peparse::pe_header &header) {
 	return view;
 }
 
-// 节段迭代上下文(收集节段信息与不可执行段的字符串统计)
+// 节段迭代上下文(收集节段信息与所有节段的字符串统计)
 struct SectionScanCtx {
 	std::vector<SectionInfo> sections;
 	StringScanAccum strings;
 };
 
-// 节段迭代回调: 记录节段信息(名称/地址/大小/特征/熵), 并对不可执行段执行字符串扫描
+// 节段迭代回调: 记录节段信息(名称/地址/大小/特征/熵)，并对所有节段执行字符串扫描
 int section_callback(void *ctx, const peparse::VA &, const std::string &sec_name,
 	const peparse::image_section_header &sec, const peparse::bounded_buffer *sec_data) {
 	auto *scan = static_cast<SectionScanCtx *>(ctx);
@@ -691,9 +691,8 @@ int section_callback(void *ctx, const peparse::VA &, const std::string &sec_name
 	}
 	scan->sections.push_back(std::move(info));
 
-	// 字符串扫描: 仅不可执行节段
-	if (!(sec.Characteristics & IMAGE_SCN_MEM_EXECUTE)
-		&& sec_data != nullptr && sec_data->buf != nullptr && sec_data->bufLen > 0) {
+	// 字符串扫描: 所有节段(含可执行段，捕获代码段硬编码的命令串/URL/IP等)
+	if (sec_data != nullptr && sec_data->buf != nullptr && sec_data->bufLen > 0) {
 		scan_bytes_strings(scan->strings, sec_data->buf, sec_data->bufLen);
 	}
 	return 0;
@@ -923,7 +922,7 @@ PEFeatPack extract_pe_feats(const std::string &file_path, ByteHistFeatPack *byte
 		}
 	}
 
-	// 字符串特征(扫描不可执行节段的字节)
+	// 字符串特征(扫描所有节段的字节)
 	SIZE_T scanned_bytes = scan.strings.scanned_bytes;
 	feats.string_count = scan.strings.count;
 	feats.string_avg_len = scan.strings.count > 0 ? scan.strings.len_sum / (double)scan.strings.count : 0.0;
