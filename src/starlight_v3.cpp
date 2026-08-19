@@ -90,17 +90,20 @@ std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t 
 
 	try {
 		for (auto &entry : fs::recursive_directory_iterator(folder_path, fs::directory_options::skip_permission_denied)) {
-			if (file_paths.size() >= max_dataset_size)
+			if (file_paths.size() >= max_dataset_size) {
 				break;
+			}
 
-			if (!entry.is_regular_file())
+			if (!entry.is_regular_file()) {
 				continue;
+			}
 
 			// 扩展名过滤(大小写不敏感)
 			if (!allowed_extensions.empty()) {
 				std::string ext = lowercase_ext(entry.path().extension().string());
-				if (!allowed_extensions.count(ext))
+				if (!allowed_extensions.count(ext)) {
 					continue;
+				}
 			}
 
 			file_paths.push_back(entry.path());
@@ -110,8 +113,9 @@ std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t 
 	}
 
 	const size_t total = file_paths.size();
-	if (total == 0)
+	if (total == 0) {
 		return empty_result;
+	}
 
 	// 线程数计算
 	unsigned int hw = std::thread::hardware_concurrency();
@@ -128,8 +132,9 @@ std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t 
 	auto worker = [&]() {
 		while (true) {
 			size_t idx = current_idx.fetch_add(1);
-			if (idx >= total)
+			if (idx >= total) {
 				break;
+			}
 
 			try {
 				auto [success, efg] = starlight_v3::generate_efg(file_paths[idx].string());
@@ -155,10 +160,12 @@ std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t 
 
 	std::vector<std::thread> threads;
 	threads.reserve(real_threads);
-	for (unsigned i = 0; i < real_threads; ++i)
+	for (unsigned i = 0; i < real_threads; ++i) {
 		threads.emplace_back(worker);
-	for (auto &t : threads)
+	}
+	for (auto &t : threads) {
 		t.join();
+	}
 
 	// 压缩结果
 	std::vector<starlight_v3::EFG> dataset;
@@ -250,59 +257,59 @@ bool load_train_config(const std::string &config_path, starlight_v3::TrainConfig
 		try {
 			if (key.rfind("tspm_config.", 0) == 0) {
 				const std::string field = key.substr(std::string("tspm_config.").size());
-				if (field == "preprune_factor")
+				if (field == "preprune_factor") {
 					config.tspm_config.preprune_factor = std::stod(value_str);
-				else if (field == "max_root_support")
+				} else if (field == "max_root_support") {
 					config.tspm_config.max_root_support = std::stod(value_str);
-				else if (field == "max_expan_ratio")
+				} else if (field == "max_expan_ratio") {
 					config.tspm_config.max_expan_ratio = std::stod(value_str);
-				else if (field == "thread_count")
+				} else if (field == "thread_count") {
 					config.tspm_config.thread_count = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "min_support")
+				} else if (field == "min_support") {
 					config.tspm_config.min_support = std::stod(value_str);
-				else if (field == "max_skip")
+				} else if (field == "max_skip") {
 					config.tspm_config.max_skip = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "max_length")
+				} else if (field == "max_length") {
 					config.tspm_config.max_length = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "max_depth")
+				} else if (field == "max_depth") {
 					config.tspm_config.max_depth = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "min_distinction")
+				} else if (field == "min_distinction") {
 					config.tspm_config.min_distinction = std::stod(value_str);
-				else if (field == "noisy_api_min_benign_ratio")
+				} else if (field == "noisy_api_min_benign_ratio") {
 					config.tspm_config.noisy_api_min_benign_ratio = std::stod(value_str);
-				else if (field == "noisy_api_max_mal_over_ben")
+				} else if (field == "noisy_api_max_mal_over_ben") {
 					config.tspm_config.noisy_api_max_mal_over_ben = std::stod(value_str);
-				else {
+				} else {
 					std::cerr << "[Error] " << config_path << ":" << line_num << " 未知tspm字段: " << field << std::endl;
 					return false;
 				}
 			} else if (key.rfind("lgbm_config.", 0) == 0) {
 				const std::string field = key.substr(std::string("lgbm_config.").size());
-				if (field == "num_iterations")
+				if (field == "num_iterations") {
 					config.lgbm_config.num_iterations = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "learning_rate")
+				} else if (field == "learning_rate") {
 					config.lgbm_config.learning_rate = std::stod(value_str);
-				else if (field == "num_leaves")
+				} else if (field == "num_leaves") {
 					config.lgbm_config.num_leaves = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "min_data_in_leaf")
+				} else if (field == "min_data_in_leaf") {
 					config.lgbm_config.min_data_in_leaf = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "feature_fraction")
+				} else if (field == "feature_fraction") {
 					config.lgbm_config.feature_fraction = std::stod(value_str);
-				else if (field == "bagging_fraction")
+				} else if (field == "bagging_fraction") {
 					config.lgbm_config.bagging_fraction = std::stod(value_str);
-				else if (field == "bagging_freq")
+				} else if (field == "bagging_freq") {
 					config.lgbm_config.bagging_freq = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "lambda_l2")
+				} else if (field == "lambda_l2") {
 					config.lgbm_config.lambda_l2 = std::stod(value_str);
-				else if (field == "validation_ratio")
+				} else if (field == "validation_ratio") {
 					config.lgbm_config.validation_ratio = std::stod(value_str);
-				else if (field == "early_stopping_rounds")
+				} else if (field == "early_stopping_rounds") {
 					config.lgbm_config.early_stopping_rounds = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "random_seed")
+				} else if (field == "random_seed") {
 					config.lgbm_config.random_seed = static_cast<unsigned int>(std::stoul(value_str));
-				else if (field == "thread_count")
+				} else if (field == "thread_count") {
 					config.lgbm_config.thread_count = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
-				else if (field == "is_unbalance") {
+				} else if (field == "is_unbalance") {
 					// 布尔值: 支持 1/0/true/false/on/off/yes/no
 					std::string v = value_str;
 					std::transform(v.begin(), v.end(), v.begin(), ::tolower);
@@ -401,12 +408,13 @@ void print_infer_result(const fs::path &path, const starlight_v3::AnalysisResult
 	std::string verdict;
 	if (low_th > 0.0 && high_th > 0.0) {
 		// 三分类: 上阈值以上病毒, 下阈值以下安全, 中间可疑
-		if (result.final_score >= high_th)
+		if (result.final_score >= high_th) {
 			verdict = "[MALWARE]";
-		else if (result.final_score < low_th)
+		} else if (result.final_score < low_th) {
 			verdict = "[BENIGN ]";
-		else
+		} else {
 			verdict = "[SUSPICIOUS]";
+		}
 	} else {
 		// 二分类: 默认阈值0.5
 		verdict = (result.final_score > kMalwareThreshold ? "[MALWARE] " : "[BENIGN ] ");
@@ -534,10 +542,12 @@ int infer_folder(const starlight_v3::Model &model, const fs::path &folder_path, 
 	std::vector<fs::path> file_paths;
 	try {
 		for (auto &entry : fs::recursive_directory_iterator(folder_path, fs::directory_options::skip_permission_denied)) {
-			if (file_paths.size() >= max_samples)
+			if (file_paths.size() >= max_samples) {
 				break;
-			if (!entry.is_regular_file())
+			}
+			if (!entry.is_regular_file()) {
 				continue;
+			}
 			// 不预设扩展名过滤: 交予generate_efg自行判断是否为PE, 非PE文件推理失败计入failed
 			file_paths.push_back(entry.path());
 		}

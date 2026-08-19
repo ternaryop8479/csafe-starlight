@@ -32,6 +32,6 @@ inline bool near_zero(double k) {
 	return k > -EPSILON && k < EPSILON;
 }
 
-}
+} // namespace starlight_v3
 
 #endif

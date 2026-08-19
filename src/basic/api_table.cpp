@@ -46,4 +46,4 @@ const std::vector<std::string> &APITable::get_table() const {
 	return api_table_;
 }
 
-}
+} // namespace starlight_v3

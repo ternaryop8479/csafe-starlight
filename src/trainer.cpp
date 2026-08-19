@@ -30,10 +30,9 @@ namespace {
 // 无边EFG的特征是edges_为空(典型如.NET程序, 其EFG没有调用边, 会干扰tosSPM训练)
 size_t drop_edgeless(std::vector<starlight_v3::EFG> &dataset) {
 	size_t before = dataset.size();
-	dataset.erase(std::remove_if(dataset.begin(), dataset.end(),
-					  [](const starlight_v3::EFG &efg) {
-						  return efg.edges_.empty();
-					  }),
+	dataset.erase(std::remove_if(dataset.begin(), dataset.end(), [](const starlight_v3::EFG &efg) {
+		return efg.edges_.empty();
+	}),
 		dataset.end());
 	return before - dataset.size();
 }

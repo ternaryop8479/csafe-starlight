@@ -6,17 +6,18 @@
  * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  */
 
-#include "reasoner.h"
-#include "efg_generator.h"
-#include "lgbm/feat_extractor/efg.h"
-#include "lgbm/feat_extractor/pe.h"
-#include "lgbm/feat_extractor/tspm.h"
-#include "lgbm/feat_vector.h"
 #include <fstream>
 #include <functional>
 #include <iomanip>
 #include <iostream>
 #include <unordered_set>
+
+#include "efg_generator.h"
+#include "lgbm/feat_extractor/efg.h"
+#include "lgbm/feat_extractor/pe.h"
+#include "lgbm/feat_extractor/tspm.h"
+#include "lgbm/feat_vector.h"
+#include "reasoner.h"
 
 namespace starlight_v3 {
 
@@ -30,7 +31,7 @@ void extract_evidence_dot(const AnalysisResult &result, const std::string &filen
 
 	// DOT 文件头
 	ofs << "digraph EvidenceTree {" << std::endl;
-	ofs << "  rankdir=TB;" << std::endl; // TB: Top to Bottom, LR: Left to Right
+	ofs << "  rankdir=TB;" << std::endl; // 布局方向: TB=自上而下, LR=自左至右
 	ofs << "  node [shape=box, style=\"rounded,filled\", fontname=\"Arial\", fontsize=10];" << std::endl;
 	ofs << "  edge [fontname=\"Arial\", fontsize=9];" << std::endl;
 
@@ -53,8 +54,9 @@ void extract_evidence_dot(const AnalysisResult &result, const std::string &filen
 	// 递归辅助函数：处理节点及其子树
 	std::function<void(const std::shared_ptr<tspm::EvidenceTree> &)> process_node =
 		[&](const std::shared_ptr<tspm::EvidenceTree> &node) {
-			if (!node)
+			if (!node) {
 				return;
+			}
 
 			const tspm::EvidenceTree *raw_ptr = node.get();
 
@@ -87,8 +89,9 @@ void extract_evidence_dot(const AnalysisResult &result, const std::string &filen
 
 			// 递归处理子节点并绘制边
 			for (const auto &child : node->sub_nodes) {
-				if (!child)
+				if (!child) {
 					continue;
+				}
 
 				std::string child_id = "node_" + std::to_string(reinterpret_cast<uintptr_t>(child.get()));
 

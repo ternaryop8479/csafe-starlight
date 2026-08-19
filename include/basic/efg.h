@@ -42,6 +42,6 @@ struct EFG {
 	std::vector<SIZE_T> offeset_;
 };
 
-}
+} // namespace starlight_v3
 
 #endif

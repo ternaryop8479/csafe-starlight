@@ -152,8 +152,9 @@ bool PEParser::parse() {
 
 	// 获取入口点虚拟地址
 	peparse::VA entry_va = 0;
-	if (!peparse::GetEntryPoint(impl_->pe_, entry_va))
+	if (!peparse::GetEntryPoint(impl_->pe_, entry_va)) {
 		return false;
+	}
 
 	// 先判定PE格式再取image_base: PE32+的ImageBase在OptionalHeader64中是64位字段,
 	//    若按PE32结构读取会把高32位截断, 导致入口/导入RVA全部算错
@@ -316,7 +317,7 @@ void EFGBuilder::Impl::build_global_efg() {
 		JumpStats jumps;
 	};
 
-	std::queue<State> worklist; ///< 要处理的解析入口
+	std::queue<State> worklist; // 要处理的解析入口
 
 	// 如果有入口点的话，先push入口点到待处理的解析入口中
 	if (parser_.get_entry_point() != 0) {
@@ -344,16 +345,16 @@ void EFGBuilder::Impl::build_global_efg() {
 		const uint64_t prev_api = state.prev_api;
 
 		// 该(rva, prev_api)组合已处理过则跳过
-		if (!visited_states.insert(
-							   (static_cast<GREAT_SIZE_T>(rva) << 32) | prev_api)
-				.second)
+		if (!visited_states.insert((static_cast<GREAT_SIZE_T>(rva) << 32) | prev_api).second) {
 			continue;
+		}
 
 		// 仅解码指令头(不含操作数), context为后续按需解操作数保留
 		ZydisDecodedInstruction instr {};
 		ZydisDecoderContext context {};
-		if (!decode_at(rva, instr, context, sec_cache))
+		if (!decode_at(rva, instr, context, sec_cache)) {
 			continue;
+		}
 
 		uint64_t next_rva = rva + instr.length; // 顺序下一条指令
 		const ZydisInstructionCategory category = instr.meta.category;
@@ -456,8 +457,9 @@ void EFGBuilder::Impl::add_or_update_edge(
 	uint64_t from, uint64_t to,
 	const JumpStats &stats) {
 	// 忽略非法节点RVA(0既非ENTRY也非有效调用点)
-	if (from == 0 || to == 0)
+	if (from == 0 || to == 0) {
 		return;
+	}
 	// 以打包键聚合边: 同一对节点多次出现时累加跳跃统计量(O(1))
 	auto &edge = api_edges_[edge_key(from, to)];
 	edge.jump_count_ += stats.jump_count;
@@ -477,8 +479,9 @@ bool EFGBuilder::Impl::get_call_target(
 	for (uint8_t i = 0; i < instr.operand_count_visible; ++i) {
 		const auto &op = op_buf[i];
 		// 非读取操作数(如仅写入)不构成调用目标
-		if (!(op.actions & ZYDIS_OPERAND_ACTION_READ))
+		if (!(op.actions & ZYDIS_OPERAND_ACTION_READ)) {
 			continue;
+		}
 
 		// 立即数操作数: 相对目标按RIP相对计算, 绝对目标减去镜像基址换算为RVA
 		if (op.type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
@@ -607,8 +610,9 @@ void EFGBuilder::Impl::preprocess_thunks(
 			// 遍历操作数, 解析jmp的目标是否命中IAT
 			for (uint8_t i = 0; i < instr.operand_count_visible; ++i) {
 				const auto &op = op_buf[i];
-				if (!(op.actions & ZYDIS_OPERAND_ACTION_READ))
+				if (!(op.actions & ZYDIS_OPERAND_ACTION_READ)) {
 					continue;
+				}
 				uint64_t target_rva = 0;
 				bool is_import = false;
 				std::string imp_name;
@@ -728,8 +732,9 @@ EFG EFGBuilder::Impl::to_efg() {
 	// 按源节点索引排序，符合CSR格式规范
 	std::sort(edge_entries.begin(), edge_entries.end(),
 		[](const EdgeEntry &a, const EdgeEntry &b) {
-			if (a.from_index != b.from_index)
+			if (a.from_index != b.from_index) {
 				return a.from_index < b.from_index;
+			}
 			return a.to_index < b.to_index;
 		});
 

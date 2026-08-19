@@ -3,6 +3,7 @@
  * @brief pe-parse兼容解析工具实现(修补已知缺陷后重试解析)
  * @author ternaryop8479
  * @date 2026-08-18
+ * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  */
 
 #include <algorithm>
@@ -16,30 +17,30 @@
 
 #include "pe_compat.h"
 
-namespace starlight_v3 {
-
 namespace {
 
-	// 将文件读取到自有缓冲区，失败时返回false
-	// 注意: 不能使用peparse::readFileToFileBuffer，它会对文件做PROT_READ+MAP_SHARED映射，
-	// 对映射区写入会触发SIGSEGV(且MAP_SHARED会回写源文件)，因此这里用ifstream读到自有缓冲区再修补
-	bool read_file_bytes(const std::string &file_path, std::vector<std::uint8_t> &out) {
-		std::ifstream ifs(file_path, std::ios::binary);
-		if (!ifs) {
-			return false;
-		}
-		ifs.seekg(0, std::ios::end);
-		const std::streamoff file_size = ifs.tellg();
-		if (file_size <= 0) {
-			return false;
-		}
-		ifs.seekg(0, std::ios::beg);
-		out.resize(file_size);
-		ifs.read(reinterpret_cast<char *>(out.data()), static_cast<std::streamsize>(file_size));
-		return ifs.gcount() == file_size;
+// 将文件读取到自有缓冲区，失败时返回false
+// 注意: 不能使用peparse::readFileToFileBuffer，它会对文件做PROT_READ+MAP_SHARED映射，
+// 对映射区写入会触发SIGSEGV(且MAP_SHARED会回写源文件)，因此这里用ifstream读到自有缓冲区再修补
+bool read_file_bytes(const std::string &file_path, std::vector<std::uint8_t> &out) {
+	std::ifstream ifs(file_path, std::ios::binary);
+	if (!ifs) {
+		return false;
 	}
+	ifs.seekg(0, std::ios::end);
+	const std::streamoff file_size = ifs.tellg();
+	if (file_size <= 0) {
+		return false;
+	}
+	ifs.seekg(0, std::ios::beg);
+	out.resize(file_size);
+	ifs.read(reinterpret_cast<char *>(out.data()), static_cast<std::streamsize>(file_size));
+	return ifs.gcount() == file_size;
+}
 
 } // namespace
+
+namespace starlight_v3 {
 
 ParsedPECompat parse_pe_with_compat(const std::string &file_path) {
 	// 先走标准解析路径，大多数文件无需任何修补即可直接解析

@@ -40,7 +40,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-// 计算文件MD5 by OpenSSL
+// 使用OpenSSL计算文件MD5
 std::string file_md5(const fs::path &path) {
 	std::ifstream ifs(path, std::ios::binary);
 	if (!ifs) {
@@ -284,10 +284,12 @@ int main(int argc, char *argv[]) {
 	// 合并待拷贝列表
 	std::vector<SampleEntry> to_copy;
 	to_copy.reserve(keep_edgeless + keep_normal);
-	for (auto &s : edgeless_samples)
+	for (auto &s : edgeless_samples) {
 		to_copy.push_back(std::move(s));
-	for (auto &s : normal_samples)
+	}
+	for (auto &s : normal_samples) {
 		to_copy.push_back(std::move(s));
+	}
 
 	std::cout << "[Info] 开始拷贝 " << to_copy.size() << " 个样本到 " << dst_dir << " ..." << std::endl;
 	std::atomic<size_t> copied { 0 };

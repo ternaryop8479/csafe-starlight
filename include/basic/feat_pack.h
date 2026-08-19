@@ -262,6 +262,6 @@ struct FeatPack {
 	ByteHistFeatPack byte_hist_feats;
 };
 
-}
+} // namespace starlight_v3
 
 #endif

@@ -15,10 +15,10 @@
 #include "lgbm/detail/lgbm_handle.h"
 #include "lgbm/trainer.h"
 
-namespace starlight_v3::lgbm {
+namespace {
 
 // 根据配置拼接LightGBM参数串, 格式为"key1=value1 key2=value2 ..."
-static std::string build_lgbm_params(const LGBMConfig &config) {
+std::string build_lgbm_params(const starlight_v3::lgbm::LGBMConfig &config) {
 	std::string params;
 	params += "objective=binary ";
 	params += "metric=binary_logloss ";
@@ -40,6 +40,10 @@ static std::string build_lgbm_params(const LGBMConfig &config) {
 	}
 	return params;
 }
+
+} // namespace
+
+namespace starlight_v3::lgbm {
 
 Model Trainer::train(const double *feature_matrix, int32_t nrows, int32_t ncols, const float *labels, const LGBMConfig &config) {
 	if (feature_matrix == nullptr || labels == nullptr || nrows <= 0 || ncols <= 0) {

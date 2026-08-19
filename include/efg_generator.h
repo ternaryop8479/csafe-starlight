@@ -25,6 +25,6 @@ namespace starlight_v3 {
  */
 std::pair<bool, EFG> generate_efg(const std::string &file_path);
 
-}
+} // namespace starlight_v3
 
 #endif

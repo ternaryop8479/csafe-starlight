@@ -3,6 +3,7 @@
  * @brief pe-parse兼容解析工具(修补已知缺陷后重试解析)
  * @author ternaryop8479
  * @date 2026-08-18
+ * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  */
 
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_BASIC_PE_COMPAT_H
