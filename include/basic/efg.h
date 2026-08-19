@@ -1,5 +1,5 @@
 /**
- * @file efg.h
+ * @file basic/efg.h
  * @brief 外部调用流程图数据结构的声明
  * @author ternaryop8479
  * @date 2026-07-09

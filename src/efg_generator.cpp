@@ -22,8 +22,8 @@
 #include <pe-parse/parse.h>
 
 #include "basic/efg.h"
-#include "basic/pe_compat.h"
 #include "efg_generator.h"
+#include "pe_compat.h"
 
 #ifndef ZYDIS_MAX_OPERAND_COUNT
 #define ZYDIS_MAX_OPERAND_COUNT 10

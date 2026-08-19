@@ -218,8 +218,8 @@ SIZE_T serialize_feat_pack(const FeatPack &feats, double *out) {
 #undef EMIT_PE_FIELD
 
 	// 最后序列化字节分布特征(272维)
-#define EMIT_BH_FIELD(name, count)                        \
-	for (SIZE_T bh_i = 0; bh_i < (count); ++bh_i)         \
+#define EMIT_BH_FIELD(name, count)                \
+	for (SIZE_T bh_i = 0; bh_i < (count); ++bh_i) \
 		*out++ = static_cast<double>(feats.byte_hist_feats.name[bh_i]);
 	BYTE_HIST_FEAT_FIELDS(EMIT_BH_FIELD)
 #undef EMIT_BH_FIELD

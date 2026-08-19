@@ -20,9 +20,9 @@
 #include <pe-parse/nt-headers.h>
 #include <pe-parse/parse.h>
 
-#include "basic/pe_compat.h"
 #include "basic/types.h"
 #include "lgbm/feat_extractor/pe.h"
+#include "pe_compat.h"
 
 #ifndef IMAGE_SCN_MEM_EXECUTE
 #define IMAGE_SCN_MEM_EXECUTE 0x20000000
@@ -1070,7 +1070,7 @@ PEFeatPack extract_pe_feats(const std::string &file_path, ByteHistFeatPack *byte
 		feats.is_dotnet = clr_dir.VirtualAddress != 0;
 		feats.clr_header_size = clr_dir.Size;
 		// 解析IMAGE_COR20_HEADER: 偏移+8处为MetaData数据目录(RVA+Size)，需RVA转文件偏移并做越界检查
-	if (feats.is_dotnet && pe->fileBuffer != nullptr && pe->fileBuffer->buf != nullptr) {
+		if (feats.is_dotnet && pe->fileBuffer != nullptr && pe->fileBuffer->buf != nullptr) {
 			uint64_t clr_off = rva_to_file_offset(clr_dir.VirtualAddress, sections);
 			uint64_t file_len = pe->fileBuffer->bufLen;
 			if (clr_off != 0 && clr_off + 16 <= file_len) {

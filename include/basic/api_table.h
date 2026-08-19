@@ -1,5 +1,5 @@
 /**
- * @file api_table.h
+ * @file basic/api_table.h
  * @brief API映射表数据结构声明
  * @author ternaryop8479
  * @date 2026-07-09

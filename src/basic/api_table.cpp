@@ -1,5 +1,5 @@
 /**
- * @file api_table.cpp
+ * @file basic/api_table.cpp
  * @brief API映射表数据结构实现
  * @author ternaryop8479
  * @date 2026-07-09
