@@ -70,25 +70,14 @@ std::vector<std::vector<size_t>> split_folds(size_t total, starlight_v3::SIZE_T 
 	std::shuffle(edgeless_idx.begin(), edgeless_idx.end(), rng);
 	std::shuffle(normal_idx.begin(), normal_idx.end(), rng);
 
-	// 按比例交替合并: 以较小组为节奏, 均匀穿插两组下标, 使整体序列两类交错分布
-	std::vector<size_t> indices;
-	indices.reserve(total);
-	const size_t edgeless_n = edgeless_idx.size();
-	const size_t normal_n = normal_idx.size();
-	const size_t max_n = std::max(edgeless_n, normal_n);
-	for (size_t i = 0; i < max_n; ++i) {
-		if (i < edgeless_n)
-			indices.push_back(edgeless_idx[i]);
-		if (i < normal_n)
-			indices.push_back(normal_idx[i]);
-	}
-
 	std::vector<std::vector<size_t>> folds(static_cast<size_t>(k));
-	// 按连续分块分配折: 穿插序列本身已按edgeless/普通交错, 每折拿到一段连续区间即可保证两类比例均衡;
-	// 若按i%k隔位分配, 当k=2时偶数位全是edgeless、奇数位全是普通, 训练折会被整折剔除导致崩溃
-	const size_t kk = static_cast<size_t>(k);
-	for (size_t i = 0; i < total; ++i) {
-		folds[std::min(i * kk / total, kk - 1)].push_back(indices[i]);
+	// 按类各自隔位轮转分配折: 每折拿到与整体等比例的edgeless/普通样本, 保证折间两类比例均衡;
+	// 连续分块在edgeless占比高时会让前几折几乎全是edgeless、后几折几乎全是普通, 折间特征分布严重偏斜
+	for (size_t i = 0; i < edgeless_idx.size(); ++i) {
+		folds[i % static_cast<size_t>(k)].push_back(edgeless_idx[i]);
+	}
+	for (size_t i = 0; i < normal_idx.size(); ++i) {
+		folds[i % static_cast<size_t>(k)].push_back(normal_idx[i]);
 	}
 	return folds;
 }
