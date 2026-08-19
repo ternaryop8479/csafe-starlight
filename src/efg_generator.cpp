@@ -316,9 +316,14 @@ void EFGBuilder::Impl::build_global_efg() {
 		JumpStats jumps;
 	};
 
-	std::queue<State> worklist;
-	// 从所有可执行段起点开始遍历(不依赖入口点: 合法DLL可能无入口函数, 且全段覆盖可含导出函数代码),
-	// 每段起点均以ENTRY节点为prev_api, visited_states去重保证跨段重叠时不会重复处理
+	std::queue<State> worklist; ///< 要处理的解析入口
+
+	// 如果有入口点的话，先push入口点到待处理的解析入口中
+	if (parser_.get_entry_point() != 0) {
+		worklist.push({ parser_.get_entry_point(), ENTRY_NODE_RVA, {} });
+	}
+
+	// push所有可执行段头部到待处理的解析入口中
 	for (const auto &sec : parser_.get_exec_sections()) {
 		worklist.push({ sec.base_rva_, ENTRY_NODE_RVA, {} });
 	}
