@@ -12,6 +12,7 @@ train.conf
 
 # LSP配置
 .clang*
+.cache/
 
 # 本地实验记录
 experiments/
