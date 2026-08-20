@@ -2,6 +2,21 @@
 
 ## CSafe-Starlight V3
 
+### CSafe-Starlight V3A-26.8.20 Release
+- 版本号：v3a-26.8.20 release
+- 训练样本：127466个(39731个恶意文件，87735个良性文件)
+- tosSPM节点数：51947个
+- LightGBM模型大小：27677046字节
+- 模型总大小：57656 KiB
+- 训练时间：2026-08-20 01:32
+- 病毒库日期：2026-04
+- 误报率(系统文件)：~0.0214%
+- 误报率(x86商业软件)：1.024%
+- 误报率(x64商业软件)：0.0909%
+- 建议最低阈值：0.1
+- 建议最高阈值：0.2
+- 模型下载直链：https://cloud-drive.ternaryop.top/raw/public/csafe-starlight/v3/models/csafe_starlight_v3a-26.8.20-release.starlv3.bin
+
 ### CSafe-Starlight V3-26.8.12 Release
 - 版本号：v3-26.8.12 release
 - 训练样本：70469个(38905个恶意文件，31564个良性文件)
