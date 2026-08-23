@@ -324,10 +324,7 @@ void EFGBuilder::Impl::build_global_efg() {
 		worklist.push({ parser_.get_entry_point(), ENTRY_NODE_RVA, {} });
 	}
 
-	// push所有可执行段头部到待处理的解析入口中
-	for (const auto &sec : parser_.get_exec_sections()) {
-		worklist.push({ sec.base_rva_, ENTRY_NODE_RVA, {} });
-	}
+	// 没有入口点的话worklist置空
 
 	// 去重表: 以打包键(rva, prev_api)记录组合是否已处理, 防止无限循环
 	std::unordered_set<GREAT_SIZE_T> visited_states;
