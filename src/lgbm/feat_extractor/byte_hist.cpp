@@ -1,6 +1,6 @@
 /**
  * @file lgbm/feat_extractor/byte_hist.cpp
- * @brief 文件原始字节分布特征提取器实现
+ * @brief 文件分块熵特征提取器实现
  * @author ternaryop8479
  * @date 2026-08-18
  * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
@@ -40,21 +40,10 @@ double block_shannon_entropy(const uint8_t *data, SIZE_T len) {
 
 namespace starlight_v3::lgbm {
 
-ByteHistFeatPack extract_byte_hist_feats(const uint8_t *data, SIZE_T len) {
-	ByteHistFeatPack feats = {}; // 值初始化，空输入保持全零
+BlockEntropyFeatPack extract_block_entropy_feats(const uint8_t *data, SIZE_T len) {
+	BlockEntropyFeatPack feats = {}; // 值初始化，空输入保持全零
 	if (data == nullptr || len == 0) {
 		return feats;
-	}
-
-	// 单遍统计256种字节值的频次
-	std::array<uint64_t, 256> freq = {};
-	for (SIZE_T i = 0; i < len; ++i) {
-		++freq[data[i]];
-	}
-
-	// 1-gram字节直方图: log1p(256 * p)，与文件大小解耦
-	for (int i = 0; i < 256; ++i) {
-		feats.byte_hist[(SIZE_T)i] = std::log1p(256.0 * (double)freq[(SIZE_T)i] / (double)len);
 	}
 
 	// 分块熵: 均分16块，最后一块并入尾部余数

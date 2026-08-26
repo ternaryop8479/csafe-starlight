@@ -22,6 +22,7 @@
 
 #include "basic/types.h"
 #include "lgbm/feat_extractor/pe.h"
+#include "lgbm/feat_extractor/byte_hist.h"
 #include "pe_compat.h"
 
 #ifndef IMAGE_SCN_MEM_EXECUTE
@@ -750,7 +751,7 @@ private:
 namespace starlight_v3::lgbm {
 
 // PE特征提取主函数
-PEFeatPack extract_pe_feats(const std::string &file_path, ByteHistFeatPack *byte_hist_out) {
+PEFeatPack extract_pe_feats(const std::string &file_path, BlockEntropyFeatPack *block_entropy_out) {
 	PEFeatPack feats = {}; // 值初始化, 提取失败的部分保持全零
 
 	// 兼容解析: 首次解析失败时自动修补pe-parse已知缺陷(无数据段目录/空debug条目)后重试
@@ -1103,9 +1104,9 @@ PEFeatPack extract_pe_feats(const std::string &file_path, ByteHistFeatPack *byte
 		}
 	}
 
-	// 同步提取字节分布特征，复用本次PE解析的文件字节，避免重复读盘
-	if (byte_hist_out != nullptr && pe->fileBuffer != nullptr && pe->fileBuffer->buf != nullptr) {
-		*byte_hist_out = extract_byte_hist_feats(pe->fileBuffer->buf, pe->fileBuffer->bufLen);
+	// 同步提取分块熵特征，复用本次PE解析的文件字节，避免重复读盘
+	if (block_entropy_out != nullptr && pe->fileBuffer != nullptr && pe->fileBuffer->buf != nullptr) {
+		*block_entropy_out = extract_block_entropy_feats(pe->fileBuffer->buf, pe->fileBuffer->bufLen);
 	}
 
 	return feats;

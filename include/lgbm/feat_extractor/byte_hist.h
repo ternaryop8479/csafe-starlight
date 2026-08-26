@@ -1,6 +1,6 @@
 /**
  * @file lgbm/feat_extractor/byte_hist.h
- * @brief 文件原始字节分布特征提取器
+ * @brief 文件分块熵特征提取器
  * @author ternaryop8479
  * @date 2026-08-18
  * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
@@ -16,14 +16,13 @@
 namespace starlight_v3::lgbm {
 
 /**
- * @brief 从原始文件字节提取字节分布特征(272维)
- * @note byte_hist[i] = log1p(256 * count_i / total)，与文件大小解耦，均匀分布时各维约0.69；
- * 文件均分16块统计每块Shannon熵(0~8), 最后一块并入尾部余数.
+ * @brief 从原始文件字节提取分块熵特征(16维)
+ * @note 全文件按字节数均分16块统计每块Shannon熵(0~8), 最后一块并入尾部余数.
  * @param data 文件完整字节，只读，可为nullptr
  * @param len 字节长度，为0时返回全零特征
- * @return 提取出的272维特征
+ * @return 提取出的16维特征
  */
-ByteHistFeatPack extract_byte_hist_feats(const uint8_t *data, SIZE_T len);
+BlockEntropyFeatPack extract_block_entropy_feats(const uint8_t *data, SIZE_T len);
 
 } // namespace starlight_v3::lgbm
 

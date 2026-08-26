@@ -18,13 +18,13 @@ namespace starlight_v3::lgbm {
 constexpr SIZE_T kEfgFeatDims = 36; ///< EFG结构及边信息特征维度(EFGFeatPack)
 constexpr SIZE_T kTspmFeatDims = 35; ///< tosSPM推理结果特征维度(TSPMFeatPack)
 constexpr SIZE_T kPeFeatDims = 91; ///< PE静态特征维度(PEFeatPack，含CLR与壳指纹)
-constexpr SIZE_T kByteHistFeatDims = 272; ///< 文件字节分布特征维度(ByteHistFeatPack)
-constexpr SIZE_T kTotalFeatDims = 434; ///< 总特征维度(36 + 35 + 91 + 272)
+constexpr SIZE_T kBlockEntropyFeatDims = 16; ///< 文件分块熵特征维度(BlockEntropyFeatPack)
+constexpr SIZE_T kTotalFeatDims = 178; ///< 总特征维度(36 + 35 + 91 + 16)
 
 /**
  * @brief 将FeatPack按固定顺序序列化为double特征向量
- * @note 特征顺序约定: 先EFG特征(36维), 再TSPM特征(35维), 然后PE特征(91维), 最后字节分布特征(272维).
- * 该顺序与tester.cpp中宏列表的顺序保持一致, 训练与推理共用本函数, 保证特征顺序永不漂移.
+ * @note 特征顺序约定: 先EFG特征(36维), 再TSPM特征(35维), 然后PE特征(91维), 最后分块熵特征(16维).
+ * 该顺序与feat_vector.cpp中宏列表的顺序保持一致, 训练与推理共用本函数, 保证特征顺序永不漂移.
  * bool字段序列化为0/1, SIZE_T与GREAT_SIZE_T字段序列化为static_cast<double>(无精度损失).
  * @param feats 待序列化的特征集合, 只读, 不修改
  * @param out 输出缓冲区, 调用方必须保证容量至少为kTotalFeatDims个double

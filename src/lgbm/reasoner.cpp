@@ -6,6 +6,7 @@
  * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  */
 
+#include "lgbm/feat_vector.h"
 #include "lgbm/reasoner.h"
 
 namespace starlight_v3::lgbm {
@@ -14,6 +15,16 @@ namespace starlight_v3::lgbm {
 Reasoner::Reasoner(const Model &model) {
 	int num_iterations = 0;
 	detail::check_lgbm_status(LGBM_BoosterLoadModelFromString(model.model_string.c_str(), &num_iterations, &booster_.handle));
+
+	// 校验模型特征维度与当前引擎一致: LightGBM的PredictForMat对列数不匹配不报错,
+	// 若混用不同版本模型会静默读越界产生未定义行为, 因此必须在加载期拦下
+	int num_feature = 0;
+	detail::check_lgbm_status(LGBM_BoosterGetNumFeature(booster_.handle, &num_feature));
+	if (num_feature != static_cast<int>(kTotalFeatDims)) {
+		throw std::runtime_error("Reasoner::Reasoner(): 模型特征维度(" + std::to_string(num_feature)
+			+ ")与当前引擎特征维度(" + std::to_string(kTotalFeatDims)
+			+ ")不一致, 请使用与本引擎配套训练的模型文件");
+	}
 }
 
 Reasoner::~Reasoner() = default;

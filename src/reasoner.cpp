@@ -159,7 +159,7 @@ AnalysisResult Reasoner::analyze_efg(const EFG &efg, const std::string &file_pat
 	// 提取特征: EFG特征 + TSPM特征 + PE特征 + 字节分布特征
 	result.feats.efg_feats = lgbm::extract_efg_feats(efg);
 	result.feats.tspm_feats = lgbm::extract_tspm_feats(result.tspm_result, efg);
-	result.feats.pe_feats = lgbm::extract_pe_feats(file_path, &result.feats.byte_hist_feats);
+	result.feats.pe_feats = lgbm::extract_pe_feats(file_path, &result.feats.block_entropy_feats);
 
 	// LightGBM打分
 	double features[lgbm::kTotalFeatDims];
