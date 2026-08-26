@@ -61,6 +61,7 @@ public:
 	uint32_t entry_rva() const; ///< 入口点RVA(AddressOfEntryPoint)
 	uint16_t section_count() const; ///< 节段数量(NumberOfSections)
 	const std::vector<Section> &sections() const; ///< 节段视图列表
+	bool rva_to_offset(uint32_t rva, size_t &offset) const; ///< 将RVA换算为文件偏移(未命中节段或偏移无可读字节时返回false)
 	Dir data_dir(int index) const; ///< 数据目录项(index∈[0,16), 越界返回{0,0})
 	size_t overlay_offset() const; ///< overlay起始偏移(所有节段原始数据之后, 签名blob即位于此处)
 

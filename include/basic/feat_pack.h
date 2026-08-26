@@ -294,6 +294,42 @@ struct DotnetFeatPack {
 };
 
 /**
+ * @brief 来自导入表结构的特征数据(8维)
+ */
+struct IatFeatPack {
+	double ordinal_ratio; ///< 序号导入占全部导入的比例
+	double import_directory_size; ///< 导入目录大小
+	double delay_import_present; ///< 是否存在延迟导入目录
+	double delay_import_size; ///< 延迟导入目录大小
+	double bound_import_present; ///< 是否存在绑定导入目录
+	double first_dll_is_system; ///< 第一个DLL是否为常见系统DLL
+	double import_dll_entropy; ///< 导入DLL名称字节熵
+	double import_count; ///< 轻量解析得到的导入数量
+
+	static constexpr SIZE_T kFieldCount = 8;
+};
+
+/**
+ * @brief 来自导入能力类别统计的特征数据(12维)
+ */
+struct CapabilityFeatPack {
+	double injection_count; ///< 注入/远程内存能力导入数
+	double anti_debug_count; ///< 反调试能力导入数
+	double network_count; ///< 网络通信能力导入数
+	double download_count; ///< 下载能力导入数
+	double process_count; ///< 进程创建与操作能力导入数
+	double service_count; ///< 服务与自启动能力导入数
+	double registry_count; ///< 注册表能力导入数
+	double file_count; ///< 文件操作能力导入数
+	double crypto_count; ///< 加密能力导入数
+	double shell_count; ///< Shell执行能力导入数
+	double memory_count; ///< 内存分配与映射能力导入数
+	double ipc_count; ///< IPC/同步对象能力导入数
+
+	static constexpr SIZE_T kFieldCount = 12;
+};
+
+/**
  * @brief 来自白签名表推理的特征数据(2维)
  */
 struct SigFeatPack {
@@ -305,7 +341,7 @@ struct SigFeatPack {
 };
 
 /**
- * @brief 所有维度的特征集合(共214维)
+ * @brief 所有维度的特征集合(共234维)
  */
 struct FeatPack {
 	// 来自tosSPM引擎推理过程及结果的特征数据
@@ -328,6 +364,12 @@ struct FeatPack {
 
 	// 从CLR与.NET元数据提取的特征数据
 	DotnetFeatPack dotnet_feats;
+
+	// 从IAT结构提取的特征数据
+	IatFeatPack iat_feats;
+
+	// 从导入API能力类别统计提取的特征数据
+	CapabilityFeatPack capability_feats;
 };
 
 } // namespace starlight_v3

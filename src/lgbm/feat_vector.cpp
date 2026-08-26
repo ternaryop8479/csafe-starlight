@@ -208,6 +208,17 @@
 	X(assembly_ref_rows) X(resource_rows) X(metadata_version_length) X(strings_entropy) \
 	X(user_strings_entropy) X(managed_resource_size)
 
+// IAT/导入目录结构特征宏列表
+#define IAT_FEAT_FIELDS(X) \
+	X(ordinal_ratio) X(import_directory_size) X(delay_import_present) X(delay_import_size) \
+	X(bound_import_present) X(first_dll_is_system) X(import_dll_entropy) X(import_count)
+
+// 导入API能力类别特征宏列表
+#define CAPABILITY_FEAT_FIELDS(X) \
+	X(injection_count) X(anti_debug_count) X(network_count) X(download_count) \
+	X(process_count) X(service_count) X(registry_count) X(file_count) \
+	X(crypto_count) X(shell_count) X(memory_count) X(ipc_count)
+
 // 用于编译期统计维度数的宏
 #define FEAT_COUNT_ONE(name) +1
 static_assert(0 EFG_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kEfgFeatDims, "EFGFeatPack field count does not match EFG_FEAT_FIELDS macro");
@@ -223,6 +234,10 @@ static_assert(0 RICH_HEADER_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::k
 static_assert(starlight_v3::RichHeaderFeatPack::kFieldCount == starlight_v3::lgbm::kRichHeaderFeatDims, "RichHeaderFeatPack got new fields but RICH_HEADER_FEAT_FIELDS macro not synced");
 static_assert(0 DOTNET_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kDotnetFeatDims, "DotnetFeatPack field count does not match DOTNET_FEAT_FIELDS macro");
 static_assert(starlight_v3::DotnetFeatPack::kFieldCount == starlight_v3::lgbm::kDotnetFeatDims, "DotnetFeatPack got new fields but DOTNET_FEAT_FIELDS macro not synced");
+static_assert(0 IAT_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kIatFeatDims, "IatFeatPack field count does not match IAT_FEAT_FIELDS macro");
+static_assert(starlight_v3::IatFeatPack::kFieldCount == starlight_v3::lgbm::kIatFeatDims, "IatFeatPack got new fields but IAT_FEAT_FIELDS macro not synced");
+static_assert(0 CAPABILITY_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kCapabilityFeatDims, "CapabilityFeatPack field count does not match CAPABILITY_FEAT_FIELDS macro");
+static_assert(starlight_v3::CapabilityFeatPack::kFieldCount == starlight_v3::lgbm::kCapabilityFeatDims, "CapabilityFeatPack got new fields but CAPABILITY_FEAT_FIELDS macro not synced");
 #undef FEAT_COUNT_ONE
 
 // 数组字段维度计数(每个数组按元素数计入)
@@ -271,6 +286,16 @@ SIZE_T serialize_feat_pack(const FeatPack &feats, double *out) {
 	DOTNET_FEAT_FIELDS(EMIT_DOTNET_FIELD)
 #undef EMIT_DOTNET_FIELD
 
+	// 序列化IAT特征(8维)
+#define EMIT_IAT_FIELD(name) *out++ = static_cast<double>(feats.iat_feats.name);
+	IAT_FEAT_FIELDS(EMIT_IAT_FIELD)
+#undef EMIT_IAT_FIELD
+
+	// 序列化导入能力特征(12维)
+#define EMIT_CAPABILITY_FIELD(name) *out++ = static_cast<double>(feats.capability_feats.name);
+	CAPABILITY_FEAT_FIELDS(EMIT_CAPABILITY_FIELD)
+#undef EMIT_CAPABILITY_FIELD
+
 	return kTotalFeatDims;
 }
 
@@ -284,3 +309,5 @@ SIZE_T serialize_feat_pack(const FeatPack &feats, double *out) {
 #undef SIG_FEAT_FIELDS
 #undef RICH_HEADER_FEAT_FIELDS
 #undef DOTNET_FEAT_FIELDS
+#undef IAT_FEAT_FIELDS
+#undef CAPABILITY_FEAT_FIELDS

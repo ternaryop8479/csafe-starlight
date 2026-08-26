@@ -225,6 +225,9 @@ add_library(starlight_v3_lib STATIC
 	src/pe/authenticode.cpp
 	src/pe/rich_header.cpp
 	src/pe/dotnet.cpp
+	src/pe/imports.cpp
+	src/pe/iat.cpp
+	src/pe/capability.cpp
 )
 set_target_properties(starlight_v3_lib PROPERTIES OUTPUT_NAME starlight_v3)
 

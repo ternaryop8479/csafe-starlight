@@ -157,6 +157,24 @@ const std::vector<PeView::Section> &PeView::sections() const {
 	return sections_;
 }
 
+bool PeView::rva_to_offset(uint32_t rva, size_t &offset) const {
+	for (const Section &section : sections_) {
+		const uint64_t begin = section.va;
+		const uint64_t span = std::max(section.vsize, section.raw_size);
+		if (rva < begin || static_cast<uint64_t>(rva) - begin >= span) {
+			continue;
+		}
+		const uint64_t result = static_cast<uint64_t>(section.raw_ptr) + rva - begin;
+		// 用>=拒绝等于文件长度的末尾后一位: 该偏移无任何可读字节, 放行会迫使每个调用方自行再判一次
+		if (result >= bytes_.size()) {
+			return false;
+		}
+		offset = static_cast<size_t>(result);
+		return true;
+	}
+	return false;
+}
+
 PeView::Dir PeView::data_dir(int index) const {
 	if (index < 0 || index >= 16) {
 		return { 0, 0 };
