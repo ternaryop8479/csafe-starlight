@@ -326,12 +326,21 @@ struct DotnetFeatPack {
 	double user_strings_length_mean; ///< #US字符串平均字符数
 	double user_strings_long_ratio; ///< #US中长度>=30的字符串占比
 	double protector_marker_count; ///< 命中的已知.NET保护器特征串种类数
+	double method_body_count; ///< 可定位RVA的方法体数量
+	double method_body_missing_ratio; ///< RVA为0的方法占MethodDef总数比例
+	double method_il_total_size; ///< IL体字节总大小
+	double method_il_mean_size; ///< IL体平均大小
+	double method_il_max_size; ///< IL体最大大小
+	double method_il_min_size; ///< IL体最小大小
+	double method_tiny_body_ratio; ///< tiny格式方法体占比
+	double method_fat_body_ratio; ///< fat格式方法体占比
+	double method_il_zero_ratio; ///< IL体大小为0的方法占比
 	double metadata_version_length; ///< 元数据版本字符串长度
 	double strings_entropy; ///< #Strings流字节熵
 	double user_strings_entropy; ///< #US流字节熵
 	double managed_resource_size; ///< CLR托管资源区大小
 
-	static constexpr SIZE_T kFieldCount = 53;
+	static constexpr SIZE_T kFieldCount = 62;
 };
 
 /**
@@ -382,7 +391,7 @@ struct SigFeatPack {
 };
 
 /**
- * @brief 所有维度的特征集合(共275维)
+ * @brief 所有维度的特征集合(共284维)
  */
 struct FeatPack {
 	// 来自tosSPM引擎推理过程及结果的特征数据

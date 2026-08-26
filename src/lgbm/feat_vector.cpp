@@ -218,6 +218,9 @@
 	X(strings_digit_ratio) X(strings_non_ascii_ratio) X(strings_high_entropy_ratio) \
 	X(strings_short_ratio) X(user_strings_count) X(user_strings_length_mean) \
 	X(user_strings_long_ratio) X(protector_marker_count) \
+	X(method_body_count) X(method_body_missing_ratio) X(method_il_total_size) \
+	X(method_il_mean_size) X(method_il_max_size) X(method_il_min_size) \
+	X(method_tiny_body_ratio) X(method_fat_body_ratio) X(method_il_zero_ratio) \
 	X(metadata_version_length) X(strings_entropy) X(user_strings_entropy) \
 	X(managed_resource_size)
 
@@ -259,6 +262,14 @@ static_assert(0 BLOCK_ENTROPY_FEAT_FIELDS(BE_FEAT_COUNT) == starlight_v3::lgbm::
 static_assert(starlight_v3::BlockEntropyFeatPack::kFieldCount == starlight_v3::lgbm::kBlockEntropyFeatDims, "BlockEntropyFeatPack got new fields but BLOCK_ENTROPY_FEAT_FIELDS macro not synced");
 #undef BE_FEAT_COUNT
 
+// 各分段维度之和必须等于总维度: 新增特征段时若漏改kTotalFeatDims, 序列化会静默少写/越界
+static_assert(starlight_v3::lgbm::kEfgFeatDims + starlight_v3::lgbm::kTspmFeatDims
+		+ starlight_v3::lgbm::kPeFeatDims + starlight_v3::lgbm::kBlockEntropyFeatDims
+		+ starlight_v3::lgbm::kSigFeatDims + starlight_v3::lgbm::kRichHeaderFeatDims
+		+ starlight_v3::lgbm::kDotnetFeatDims + starlight_v3::lgbm::kIatFeatDims
+		+ starlight_v3::lgbm::kCapabilityFeatDims == starlight_v3::lgbm::kTotalFeatDims,
+	"sum of per-section feature dims does not match kTotalFeatDims");
+
 namespace starlight_v3::lgbm {
 
 SIZE_T serialize_feat_pack(const FeatPack &feats, double *out) {
@@ -277,24 +288,24 @@ SIZE_T serialize_feat_pack(const FeatPack &feats, double *out) {
 	PE_FEAT_FIELDS(EMIT_PE_FIELD)
 #undef EMIT_PE_FIELD
 
-	// 最后序列化分块熵特征(16维)
+	// 序列化分块熵特征(16维)
 #define EMIT_BE_FIELD(name, count)                \
 	for (SIZE_T be_i = 0; be_i < (count); ++be_i) \
 		*out++ = static_cast<double>(feats.block_entropy_feats.name[be_i]);
 	BLOCK_ENTROPY_FEAT_FIELDS(EMIT_BE_FIELD)
 #undef EMIT_BE_FIELD
 
-	// 最后序列化签名置信度特征(2维)
+	// 序列化签名置信度特征(2维)
 #define EMIT_SIG_FIELD(name) *out++ = static_cast<double>(feats.sig_feats.name);
 	SIG_FEAT_FIELDS(EMIT_SIG_FIELD)
 #undef EMIT_SIG_FIELD
 
-	// 序列化Rich Header特征(10维)
+	// 序列化Rich Header特征(22维)
 #define EMIT_RICH_FIELD(name) *out++ = static_cast<double>(feats.rich_header_feats.name);
 	RICH_HEADER_FEAT_FIELDS(EMIT_RICH_FIELD)
 #undef EMIT_RICH_FIELD
 
-	// 序列化.NET特征(24维)
+	// 序列化.NET特征(62维)
 #define EMIT_DOTNET_FIELD(name) *out++ = static_cast<double>(feats.dotnet_feats.name);
 	DOTNET_FEAT_FIELDS(EMIT_DOTNET_FIELD)
 #undef EMIT_DOTNET_FIELD
