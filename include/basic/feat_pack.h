@@ -161,7 +161,7 @@ struct PEFeatPack {
 	SIZE_T high_entropy_section_count; ///< 熵大于7.2的节段数(加壳信号)
 
 	// 节段统计特征(12维)
-	SIZE_T entry_section_index; ///< 入口点所在节段的下标
+	SIZE_T entry_section_index; ///< 入口点所在节段的下标(从1开始, 0表示入口点不落在任何节段内)
 	double entry_section_entropy; ///< 入口点所在节段的熵
 	double raw_size_mean; ///< 各节段SizeOfRawData均值
 	double raw_size_max; ///< 各节段SizeOfRawData最大值
@@ -244,7 +244,7 @@ struct BlockEntropyFeatPack {
 };
 
 /**
- * @brief 来自Rich Header编译器指纹的特征数据(10维)
+ * @brief 来自Rich Header编译器指纹的特征数据(22维)
  */
 struct RichHeaderFeatPack {
 	double present; ///< 是否存在可识别的Rich Header
@@ -257,8 +257,20 @@ struct RichHeaderFeatPack {
 	double max_build; ///< 最大BuildId
 	double build_span; ///< BuildId跨度
 	double present_without_debug; ///< 存在Rich Header但没有Debug目录的可疑组合
+	double known_product_count; ///< 已知编译器ProductId条目数
+	double unknown_product_count; ///< 未知编译器ProductId条目数
+	double product_diversity; ///< 不同ProductId占条目数的比例
+	double build_mean; ///< 编译器BuildId均值
+	double build_std; ///< 编译器BuildId标准差
+	double build_zero_ratio; ///< BuildId为0的条目比例(导入函数条目, 非编译器产物)
+	double prodid_min; ///< 最小ProductId(单调对应工具链年代)
+	double prodid_max; ///< 最大ProductId
+	double prodid_span; ///< ProductId跨度
+	double distinct_build_count; ///< 不同BuildId数量
+	double count_entropy; ///< 编译器产物计数分布熵
+	double mixed_toolchain; ///< 是否由多个不同BuildId的工具链混合构建
 
-	static constexpr SIZE_T kFieldCount = 10;
+	static constexpr SIZE_T kFieldCount = 22;
 };
 
 /**
@@ -341,7 +353,7 @@ struct SigFeatPack {
 };
 
 /**
- * @brief 所有维度的特征集合(共234维)
+ * @brief 所有维度的特征集合(共246维)
  */
 struct FeatPack {
 	// 来自tosSPM引擎推理过程及结果的特征数据

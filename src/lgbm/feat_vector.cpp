@@ -197,7 +197,11 @@
 	X(min_build)               \
 	X(max_build)               \
 	X(build_span)              \
-	X(present_without_debug)
+	X(present_without_debug)   \
+	X(known_product_count) X(unknown_product_count) X(product_diversity) \
+	X(build_mean) X(build_std) X(build_zero_ratio) X(prodid_min) \
+	X(prodid_max) X(prodid_span) X(distinct_build_count) \
+	X(count_entropy) X(mixed_toolchain)
 
 // CLR与.NET元数据特征宏列表
 #define DOTNET_FEAT_FIELDS(X) \
