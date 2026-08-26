@@ -211,6 +211,12 @@ bool Model::save_to_file(const std::string &path) const {
 	content.append(reinterpret_cast<const char *>(&lgbm_len), sizeof(lgbm_len));
 	content.append(lgbm_model_.model_string);
 
+	// 追加白签名表节(V3B格式): 长度前缀 + 表序列化字节
+	const std::string sigtab_data = sig_table_.serialize();
+	const uint64_t sigtab_len = static_cast<uint64_t>(sigtab_data.size());
+	content.append(reinterpret_cast<const char *>(&sigtab_len), sizeof(sigtab_len));
+	content.append(sigtab_data);
+
 	// 一次性写入文件
 	std::ofstream ofs(path, std::ios::binary);
 	if (!ofs.is_open()) {
@@ -285,8 +291,20 @@ bool Model::load_from_file(const std::string &path) {
 	}
 	lgbm_model_.model_string.assign(reader.ptr, lgbm_len);
 	reader.ptr += lgbm_len;
-	if (reader.ptr != reader.end) {
-		return false;
+
+	// 白签名表节(V3B新增): 旧版模型可能没有该节, 剩余不足8字节时视为空表以兼容加载
+	if (reader.end - reader.ptr >= static_cast<std::ptrdiff_t>(sizeof(uint64_t))) {
+		uint64_t sigtab_len = 0;
+		if (!reader.get(sigtab_len)) {
+			return false;
+		}
+		if (reader.ptr + sigtab_len != reader.end) {
+			return false;
+		}
+		sig_table_ = authenticode::Model::deserialize(std::string(reader.ptr, sigtab_len));
+		reader.ptr += sigtab_len;
+	} else {
+		sig_table_ = authenticode::Model();
 	}
 
 	return true;
@@ -312,6 +330,16 @@ std::string Model::get_version() const {
 	result += (day < 10) ? "0" : "";
 	result += std::to_string(day);
 	return result;
+}
+
+// 获取内部白签名表模型
+const authenticode::Model &Model::sig_table() const {
+	return sig_table_;
+}
+
+// 设置白签名表模型
+void Model::set_sig_table(const authenticode::Model &sig_table) {
+	sig_table_ = sig_table;
 }
 
 // 获取内部tosSPM模型

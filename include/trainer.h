@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "authenticode/trainer.h"
 #include "basic/efg.h"
 #include "basic/types.h"
 #include "lgbm/trainer.h"
@@ -34,6 +35,7 @@ struct TrainSample {
  */
 struct TrainConfig {
 	tspm::TrainingConfig tspm_config; ///< tosSPM训练参数(见tspm/trainer.h中TrainingConfig的字段说明)
+	authenticode::TrainerConfig authenticode_config; ///< 白签名表训练参数(见authenticode/trainer.h中TrainerConfig的字段说明)
 	lgbm::LGBMConfig lgbm_config; ///< LightGBM训练参数(见lgbm/trainer.h中LGBMConfig的字段说明)
 	SIZE_T cross_validation_k; ///< 交叉训练折数, 值域[2, +∞)。数据集按此折数划分后轮流作为测试集生成特征, 折数越大每折训练集越完整、特征越稳定, 但tosSPM训练与推理次数随之增加
 	unsigned int random_seed; ///< 折划分的随机种子, 固定后可复现交叉训练的划分结果

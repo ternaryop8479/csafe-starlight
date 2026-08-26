@@ -244,7 +244,18 @@ struct BlockEntropyFeatPack {
 };
 
 /**
- * @brief 所有维度的特征集合(共178维)
+ * @brief 来自白签名表推理的特征数据(2维)
+ */
+struct SigFeatPack {
+	double sig_confidence; ///< 签名者置信度: 白表命中=1.0, 有效但陌生=0.5, 无签名或解析失败=0.0
+	double signed_present; ///< 是否存在属性证书blob(0/1)
+
+	// 结构体字段数, 与feat_vector.cpp中SIG_FEAT_FIELDS宏的维度数编译期对齐, 防止字段遗漏
+	static constexpr SIZE_T kFieldCount = 2;
+};
+
+/**
+ * @brief 所有维度的特征集合(共180维)
  */
 struct FeatPack {
 	// 来自tosSPM引擎推理过程及结果的特征数据
@@ -258,6 +269,9 @@ struct FeatPack {
 
 	// 从文件原始字节中提取出的分块熵特征数据
 	BlockEntropyFeatPack block_entropy_feats;
+
+	// 来自Authenticode白签名表推理的特征数据
+	SigFeatPack sig_feats;
 };
 
 } // namespace starlight_v3

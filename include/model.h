@@ -11,6 +11,7 @@
 
 #include <string>
 
+#include "authenticode/model.h"
 #include "lgbm/model.h"
 #include "tspm/model.h"
 
@@ -71,6 +72,18 @@ public:
 	const tspm::Model &tspm_model() const;
 
 	/**
+	 * @brief 获取内部白签名表模型
+	 * @return 白签名表模型的const引用
+	 */
+	const authenticode::Model &sig_table() const;
+
+	/**
+	 * @brief 设置白签名表模型(训练流程在LightGBM训练前构建, 保存时随模型一并序列化)
+	 * @param sig_table 白签名表模型
+	 */
+	void set_sig_table(const authenticode::Model &sig_table);
+
+	/**
 	 * @brief 获取内部LightGBM模型
 	 * @return LightGBM模型的const引用
 	 */
@@ -79,6 +92,7 @@ public:
 private:
 	tspm::Model tspm_model_; ///< tosSPM模型(Trie树)
 	lgbm::Model lgbm_model_; ///< LightGBM模型
+	authenticode::Model sig_table_; ///< 白签名表模型(推理时供签名置信度特征查表)
 	SIZE_T version_ = 0; ///< 用于标记当前模型训练日期
 };
 

@@ -181,6 +181,11 @@
 #define BLOCK_ENTROPY_FEAT_FIELDS(X) \
 	X(block_entropy, 16)
 
+// 白签名置信度特征宏列表
+#define SIG_FEAT_FIELDS(X)   \
+	X(sig_confidence)        \
+	X(signed_present)
+
 // 用于编译期统计维度数的宏
 #define FEAT_COUNT_ONE(name) +1
 static_assert(0 EFG_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kEfgFeatDims, "EFGFeatPack field count does not match EFG_FEAT_FIELDS macro");
@@ -190,6 +195,8 @@ static_assert(0 PE_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kPeFeatDim
 static_assert(starlight_v3::EFGFeatPack::kFieldCount == starlight_v3::lgbm::kEfgFeatDims, "EFGFeatPack got new fields but EFG_FEAT_FIELDS macro not synced");
 static_assert(starlight_v3::TSPMFeatPack::kFieldCount == starlight_v3::lgbm::kTspmFeatDims, "TSPMFeatPack got new fields but TSPM_FEAT_FIELDS macro not synced");
 static_assert(starlight_v3::PEFeatPack::kFieldCount == starlight_v3::lgbm::kPeFeatDims, "PEFeatPack got new fields but PE_FEAT_FIELDS macro not synced");
+static_assert(0 SIG_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kSigFeatDims, "SigFeatPack field count does not match SIG_FEAT_FIELDS macro");
+static_assert(starlight_v3::SigFeatPack::kFieldCount == starlight_v3::lgbm::kSigFeatDims, "SigFeatPack got new fields but SIG_FEAT_FIELDS macro not synced");
 #undef FEAT_COUNT_ONE
 
 // 数组字段维度计数(每个数组按元素数计入)
@@ -222,6 +229,11 @@ SIZE_T serialize_feat_pack(const FeatPack &feats, double *out) {
 		*out++ = static_cast<double>(feats.block_entropy_feats.name[be_i]);
 	BLOCK_ENTROPY_FEAT_FIELDS(EMIT_BE_FIELD)
 #undef EMIT_BE_FIELD
+
+	// 最后序列化签名置信度特征(2维)
+#define EMIT_SIG_FIELD(name) *out++ = static_cast<double>(feats.sig_feats.name);
+	SIG_FEAT_FIELDS(EMIT_SIG_FIELD)
+#undef EMIT_SIG_FIELD
 
 	return kTotalFeatDims;
 }

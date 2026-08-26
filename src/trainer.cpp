@@ -19,12 +19,26 @@
 
 #include "lgbm/feat_extractor/efg.h"
 #include "lgbm/feat_extractor/pe.h"
+#include "authenticode/reasoner.h"
+#include "authenticode/trainer.h"
 #include "lgbm/feat_extractor/tspm.h"
 #include "lgbm/feat_vector.h"
+#include "pe/authenticode.h"
+#include "pe/view.h"
 #include "trainer.h"
 #include "tspm/reasoner.h"
 
 namespace {
+
+// 提取单个PE文件的签名者身份(供签名扫描阶段并行调用)
+starlight_v3::pe::CertIdentity scan_one_signature(const std::string &file_path) {
+	starlight_v3::pe::CertIdentity identity;
+	starlight_v3::pe::PeView view;
+	if (!starlight_v3::pe::PeView::load(file_path, view)) {
+		return identity; // 非法PE: 返回present=false的空身份
+	}
+	return starlight_v3::pe::inspect_signature(view);
+}
 
 // 剔除数据集中的无边EFG, 返回被剔除的数量
 // 无边EFG的特征是edges_为空(典型如.NET程序, 其EFG没有调用边, 会干扰tosSPM训练)
@@ -99,6 +113,58 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 	std::function<void(const std::string &)> log_callback = config.log_callback ? config.log_callback : [](const std::string &) {
 	};
 
+	// 签名扫描: 并行提取全部样本的签名者身份, 聚合构建白签名表,
+	// 同时缓存每样本的签名置信度(表构建后查表得到, 特征生成阶段直接取用)
+	// 注: 白签名表为聚合身份声誉统计而非样本级预测目标, 故基于全量语料一次构建, 不融入交叉训练
+	authenticode::Trainer sig_trainer(config.authenticode_config, log_callback);
+	std::vector<starlight_v3::pe::CertIdentity> mal_identities(malware_samples.size());
+	std::vector<starlight_v3::pe::CertIdentity> ben_identities(benign_samples.size());
+	log_callback("[Trainer::train()] Scanning authenticode signatures (" + std::to_string(malware_samples.size() + benign_samples.size()) + " samples)\n");
+	{
+		std::atomic<size_t> scan_idx { 0 };
+		auto scan_worker = [&]() {
+			while (true) {
+				const size_t i = scan_idx.fetch_add(1);
+				if (i >= malware_samples.size() + benign_samples.size()) {
+					break;
+				}
+				if (i < malware_samples.size()) {
+					mal_identities[i] = scan_one_signature(malware_samples[i].file_path);
+					sig_trainer.ingest(mal_identities[i], true);
+				} else {
+					const size_t bi = i - malware_samples.size();
+					ben_identities[bi] = scan_one_signature(benign_samples[bi].file_path);
+					sig_trainer.ingest(ben_identities[bi], false);
+				}
+			}
+		};
+		unsigned int hw = std::thread::hardware_concurrency();
+		hw = hw ? hw : 4;
+		hw = hw < static_cast<unsigned int>(malware_samples.size() + benign_samples.size())
+			     ? hw
+			     : static_cast<unsigned int>(malware_samples.size() + benign_samples.size());
+		std::vector<std::thread> scan_threads;
+		scan_threads.reserve(hw);
+		for (unsigned int t = 0; t < hw; ++t) {
+			scan_threads.emplace_back(scan_worker);
+		}
+		for (auto &t : scan_threads) {
+			t.join();
+		}
+	}
+	const authenticode::Model sig_model = sig_trainer.build();
+
+	// 查表得到每样本的签名置信度(特征生成阶段直接取用)
+	authenticode::Reasoner sig_reasoner(sig_model);
+	std::vector<double> mal_sig_conf(malware_samples.size());
+	std::vector<double> ben_sig_conf(benign_samples.size());
+	for (size_t i = 0; i < mal_sig_conf.size(); ++i) {
+		mal_sig_conf[i] = sig_reasoner.confidence(mal_identities[i]);
+	}
+	for (size_t i = 0; i < ben_sig_conf.size(); ++i) {
+		ben_sig_conf[i] = sig_reasoner.confidence(ben_identities[i]);
+	}
+
 	// 黑白数据集各自独立划分k折(按edgeless/普通分层打乱, 保证每折两类比例均匀)
 	std::mt19937 rng(config.random_seed);
 	std::vector<std::vector<size_t>> mal_folds = split_folds(malware_samples.size(), config.cross_validation_k, rng, malware_samples);
@@ -158,6 +224,8 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					result.evidence_trees.clear();
 					result.evidence_trees.shrink_to_fit();
 					feats.pe_feats = lgbm::extract_pe_feats(sample.file_path, &feats.block_entropy_feats);
+					feats.sig_feats.sig_confidence = mal_sig_conf[idx];
+					feats.sig_feats.signed_present = mal_identities[idx].present ? 1.0 : 0.0;
 					lgbm::serialize_feat_pack(feats, feature_matrix.data() + idx * lgbm::kTotalFeatDims);
 				} catch (const std::exception &e) {
 					// 线程池会吞掉任务异常, 这里显式上报防止该样本特征静默全零进入训练
@@ -186,6 +254,8 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					result.evidence_trees.clear();
 					result.evidence_trees.shrink_to_fit();
 					feats.pe_feats = lgbm::extract_pe_feats(sample.file_path, &feats.block_entropy_feats);
+					feats.sig_feats.sig_confidence = ben_sig_conf[idx];
+					feats.sig_feats.signed_present = ben_identities[idx].present ? 1.0 : 0.0;
 					lgbm::serialize_feat_pack(feats, feature_matrix.data() + (mal_count + idx) * lgbm::kTotalFeatDims);
 				} catch (const std::exception &e) {
 					++feature_fail_count;
@@ -240,7 +310,9 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 
 	// 打包返回
 	log_callback("[Trainer::train()] Training complete\n");
-	return Model(final_tspm_model, lgbm_model);
+	Model result_model(final_tspm_model, lgbm_model);
+	result_model.set_sig_table(sig_model);
+	return result_model;
 }
 
 } // namespace starlight_v3

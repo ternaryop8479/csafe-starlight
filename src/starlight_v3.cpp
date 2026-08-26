@@ -318,6 +318,16 @@ bool load_train_config(const std::string &config_path, starlight_v3::TrainConfig
 					std::cerr << "[Error] " << config_path << ":" << line_num << " 未知lgbm字段: " << field << std::endl;
 					return false;
 				}
+			} else if (key.rfind("authenticode_config.", 0) == 0) {
+				const std::string field = key.substr(std::string("authenticode_config.").size());
+				if (field == "white_ben_ratio") {
+					config.authenticode_config.white_ben_ratio = std::stod(value_str);
+				} else if (field == "min_ben_count") {
+					config.authenticode_config.min_ben_count = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				} else {
+					std::cerr << "[Error] " << config_path << ":" << line_num << " 未知authenticode字段: " << field << std::endl;
+					return false;
+				}
 			} else if (key == "cross_validation_k") {
 				config.cross_validation_k = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
 			} else if (key == "random_seed") {

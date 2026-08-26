@@ -12,11 +12,14 @@
 #include <iostream>
 #include <unordered_set>
 
+#include "authenticode/reasoner.h"
 #include "efg_generator.h"
 #include "lgbm/feat_extractor/efg.h"
 #include "lgbm/feat_extractor/pe.h"
 #include "lgbm/feat_extractor/tspm.h"
 #include "lgbm/feat_vector.h"
+#include "pe/authenticode.h"
+#include "pe/view.h"
 #include "reasoner.h"
 
 namespace starlight_v3 {
@@ -156,10 +159,20 @@ AnalysisResult Reasoner::analyze_efg(const EFG &efg, const std::string &file_pat
 	// tosSPM推理(记录证据树, 供特征提取与DOT导出使用)
 	result.tspm_result = tspm_reasoner_.analyze_efg(efg, true);
 
-	// 提取特征: EFG特征 + TSPM特征 + PE特征 + 字节分布特征
+	// 提取特征: EFG特征 + TSPM特征 + PE特征 + 分块熵特征 + 签名置信度特征
 	result.feats.efg_feats = lgbm::extract_efg_feats(efg);
 	result.feats.tspm_feats = lgbm::extract_tspm_feats(result.tspm_result, efg);
 	result.feats.pe_feats = lgbm::extract_pe_feats(file_path, &result.feats.block_entropy_feats);
+
+	// 签名置信度: 查询模型内嵌白签名表(独立于PE特征的文件视图, 仅读取头部与安全目录)
+	starlight_v3::pe::PeView pv;
+	starlight_v3::pe::CertIdentity identity;
+	if (starlight_v3::pe::PeView::load(file_path, pv)) {
+		identity = starlight_v3::pe::inspect_signature(pv);
+	}
+	const authenticode::Reasoner sig_reasoner(model_.sig_table());
+	result.feats.sig_feats.sig_confidence = sig_reasoner.confidence(identity);
+	result.feats.sig_feats.signed_present = identity.present ? 1.0 : 0.0;
 
 	// LightGBM打分
 	double features[lgbm::kTotalFeatDims];
