@@ -262,6 +262,38 @@ struct RichHeaderFeatPack {
 };
 
 /**
+ * @brief 来自CLR与.NET元数据的特征数据(24维)
+ */
+struct DotnetFeatPack {
+	double present; ///< 是否存在CLR头
+	double il_only; ///< 是否为IL-only程序集
+	double requires_32bit; ///< 是否要求32位运行时
+	double strong_name; ///< 是否带强名称签名标记
+	double native_entrypoint; ///< 是否使用原生入口点
+	double metadata_major; ///< 元数据主版本
+	double metadata_minor; ///< 元数据次版本
+	double stream_count; ///< 元数据流数量
+	double strings_size; ///< #Strings流大小
+	double user_strings_size; ///< #US流大小
+	double blob_size; ///< #Blob流大小
+	double guid_size; ///< #GUID流大小
+	double type_ref_rows; ///< TypeRef表行数
+	double type_def_rows; ///< TypeDef表行数
+	double method_def_rows; ///< MethodDef表行数
+	double field_rows; ///< Field表行数
+	double member_ref_rows; ///< MemberRef表行数
+	double custom_attribute_rows; ///< CustomAttribute表行数
+	double assembly_ref_rows; ///< AssemblyRef表行数
+	double resource_rows; ///< ManifestResource表行数
+	double metadata_version_length; ///< 元数据版本字符串长度
+	double strings_entropy; ///< #Strings流字节熵
+	double user_strings_entropy; ///< #US流字节熵
+	double managed_resource_size; ///< CLR托管资源区大小
+
+	static constexpr SIZE_T kFieldCount = 24;
+};
+
+/**
  * @brief 来自白签名表推理的特征数据(2维)
  */
 struct SigFeatPack {
@@ -273,7 +305,7 @@ struct SigFeatPack {
 };
 
 /**
- * @brief 所有维度的特征集合(共190维)
+ * @brief 所有维度的特征集合(共214维)
  */
 struct FeatPack {
 	// 来自tosSPM引擎推理过程及结果的特征数据
@@ -293,6 +325,9 @@ struct FeatPack {
 
 	// 从PE Rich Header提取的编译器指纹特征数据
 	RichHeaderFeatPack rich_header_feats;
+
+	// 从CLR与.NET元数据提取的特征数据
+	DotnetFeatPack dotnet_feats;
 };
 
 } // namespace starlight_v3

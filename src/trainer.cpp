@@ -25,6 +25,7 @@
 #include "lgbm/feat_vector.h"
 #include "pe/authenticode.h"
 #include "pe/rich_header.h"
+#include "pe/dotnet.h"
 #include "pe/view.h"
 #include "trainer.h"
 #include "tspm/reasoner.h"
@@ -230,6 +231,7 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					starlight_v3::pe::PeView rich_view;
 					if (starlight_v3::pe::PeView::load(sample.file_path, rich_view)) {
 						feats.rich_header_feats = starlight_v3::pe::extract_rich_header_feats(rich_view);
+						feats.dotnet_feats = starlight_v3::pe::extract_dotnet_feats(rich_view);
 					}
 					lgbm::serialize_feat_pack(feats, feature_matrix.data() + idx * lgbm::kTotalFeatDims);
 				} catch (const std::exception &e) {
@@ -264,6 +266,7 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					starlight_v3::pe::PeView rich_view;
 					if (starlight_v3::pe::PeView::load(sample.file_path, rich_view)) {
 						feats.rich_header_feats = starlight_v3::pe::extract_rich_header_feats(rich_view);
+						feats.dotnet_feats = starlight_v3::pe::extract_dotnet_feats(rich_view);
 					}
 					lgbm::serialize_feat_pack(feats, feature_matrix.data() + (mal_count + idx) * lgbm::kTotalFeatDims);
 				} catch (const std::exception &e) {

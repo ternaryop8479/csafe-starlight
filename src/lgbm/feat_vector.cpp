@@ -199,6 +199,15 @@
 	X(build_span)              \
 	X(present_without_debug)
 
+// CLR与.NET元数据特征宏列表
+#define DOTNET_FEAT_FIELDS(X) \
+	X(present) X(il_only) X(requires_32bit) X(strong_name) X(native_entrypoint) \
+	X(metadata_major) X(metadata_minor) X(stream_count) X(strings_size) \
+	X(user_strings_size) X(blob_size) X(guid_size) X(type_ref_rows) X(type_def_rows) \
+	X(method_def_rows) X(field_rows) X(member_ref_rows) X(custom_attribute_rows) \
+	X(assembly_ref_rows) X(resource_rows) X(metadata_version_length) X(strings_entropy) \
+	X(user_strings_entropy) X(managed_resource_size)
+
 // 用于编译期统计维度数的宏
 #define FEAT_COUNT_ONE(name) +1
 static_assert(0 EFG_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kEfgFeatDims, "EFGFeatPack field count does not match EFG_FEAT_FIELDS macro");
@@ -212,6 +221,8 @@ static_assert(0 SIG_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kSigFeatD
 static_assert(starlight_v3::SigFeatPack::kFieldCount == starlight_v3::lgbm::kSigFeatDims, "SigFeatPack got new fields but SIG_FEAT_FIELDS macro not synced");
 static_assert(0 RICH_HEADER_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kRichHeaderFeatDims, "RichHeaderFeatPack field count does not match RICH_HEADER_FEAT_FIELDS macro");
 static_assert(starlight_v3::RichHeaderFeatPack::kFieldCount == starlight_v3::lgbm::kRichHeaderFeatDims, "RichHeaderFeatPack got new fields but RICH_HEADER_FEAT_FIELDS macro not synced");
+static_assert(0 DOTNET_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kDotnetFeatDims, "DotnetFeatPack field count does not match DOTNET_FEAT_FIELDS macro");
+static_assert(starlight_v3::DotnetFeatPack::kFieldCount == starlight_v3::lgbm::kDotnetFeatDims, "DotnetFeatPack got new fields but DOTNET_FEAT_FIELDS macro not synced");
 #undef FEAT_COUNT_ONE
 
 // 数组字段维度计数(每个数组按元素数计入)
@@ -255,6 +266,11 @@ SIZE_T serialize_feat_pack(const FeatPack &feats, double *out) {
 	RICH_HEADER_FEAT_FIELDS(EMIT_RICH_FIELD)
 #undef EMIT_RICH_FIELD
 
+	// 序列化.NET特征(24维)
+#define EMIT_DOTNET_FIELD(name) *out++ = static_cast<double>(feats.dotnet_feats.name);
+	DOTNET_FEAT_FIELDS(EMIT_DOTNET_FIELD)
+#undef EMIT_DOTNET_FIELD
+
 	return kTotalFeatDims;
 }
 
@@ -267,3 +283,4 @@ SIZE_T serialize_feat_pack(const FeatPack &feats, double *out) {
 #undef BLOCK_ENTROPY_FEAT_FIELDS
 #undef SIG_FEAT_FIELDS
 #undef RICH_HEADER_FEAT_FIELDS
+#undef DOTNET_FEAT_FIELDS
