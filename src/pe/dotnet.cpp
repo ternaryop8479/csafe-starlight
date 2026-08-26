@@ -7,6 +7,7 @@
  */
 
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -57,6 +58,38 @@ double entropy(const uint8_t *data, size_t size) {
 		result -= p * std::log2(p);
 	}
 	return result;
+}
+
+// 读取#US堆的压缩长度前缀(1/2/4字节变长), 成功返回消耗的字节数, 失败返回0
+size_t read_compressed_uint(const uint8_t *data, size_t remain, uint32_t &value) {
+	if (remain < 1) return 0;
+	const uint8_t b0 = data[0];
+	if ((b0 & 0x80) == 0) { value = b0; return 1; }
+	if ((b0 & 0xC0) == 0x80) {
+		if (remain < 2) return 0;
+		value = (static_cast<uint32_t>(b0 & 0x3F) << 8) | data[1];
+		return 2;
+	}
+	if (remain < 4) return 0;
+	value = (static_cast<uint32_t>(b0 & 0x1F) << 24) | (static_cast<uint32_t>(data[1]) << 16) | (static_cast<uint32_t>(data[2]) << 8) | data[3];
+	return 4;
+}
+
+// 已知.NET保护器特征串(仅在元数据/字符串堆中做静态存在性检测, 不作硬性恶意判定)
+constexpr const char *kProtectorMarkers[] = {
+	"ConfuserEx", "Confuser", ".NET Reactor", "Eziriz", "Dotfuscator",
+	"SmartAssembly", "Obfuscar", "Eazfuscator", "Agile.NET", "SecureTeam",
+	"CryptoObfuscator", "Babel"
+};
+
+bool contains_marker(const uint8_t *data, size_t size, const char *marker) {
+	if (data == nullptr || size == 0) return false;
+	const size_t marker_len = std::strlen(marker);
+	if (marker_len == 0 || marker_len > size) return false;
+	for (size_t i = 0; i + marker_len <= size; ++i) {
+		if (std::memcmp(data + i, marker, marker_len) == 0) return true;
+	}
+	return false;
 }
 
 } // namespace
@@ -140,6 +173,76 @@ DotnetFeatPack extract_dotnet_feats(const PeView &view) {
 	if (user_strings != nullptr) feats.user_strings_entropy = entropy(user_strings, user_strings_size);
 	(void)resource_rva;
 	(void)resource_size;
+
+	// #Strings堆逐字符串统计(名称/符号来源), 用于区分正常命名与混淆命名
+	if (strings != nullptr) {
+		size_t off = 0;
+		size_t len_sum = 0, len_max = 0, long_cnt = 0, short_cnt = 0, high_entropy_cnt = 0;
+		double digit_sum = 0.0, non_ascii_sum = 0.0;
+		while (off < strings_size) {
+			const size_t remaining = strings_size - off;
+			size_t len = 0;
+			while (len < remaining && strings[off + len] != 0) ++len;
+			if (len == 0) { ++off; continue; }
+			++feats.strings_count;
+			len_sum += len;
+			len_max = std::max(len_max, len);
+			if (len >= 30) ++long_cnt;
+			if (len <= 3) ++short_cnt;
+			size_t digits = 0, non_ascii = 0;
+			for (size_t i = 0; i < len; ++i) {
+				const uint8_t c = strings[off + i];
+				if (c >= '0' && c <= '9') ++digits;
+				if (c >= 0x80) ++non_ascii;
+			}
+			digit_sum += static_cast<double>(digits) / static_cast<double>(len);
+			non_ascii_sum += static_cast<double>(non_ascii) / static_cast<double>(len);
+			if (entropy(strings + off, len) > 4.5) ++high_entropy_cnt;
+			off += len + 1;
+		}
+		if (feats.strings_count > 0) {
+			feats.strings_length_mean = static_cast<double>(len_sum) / feats.strings_count;
+			feats.strings_length_max = static_cast<double>(len_max);
+			feats.strings_long_ratio = static_cast<double>(long_cnt) / feats.strings_count;
+			feats.strings_short_ratio = static_cast<double>(short_cnt) / feats.strings_count;
+			feats.strings_digit_ratio = digit_sum / feats.strings_count;
+			feats.strings_non_ascii_ratio = non_ascii_sum / feats.strings_count;
+			feats.strings_high_entropy_ratio = static_cast<double>(high_entropy_cnt) / feats.strings_count;
+		}
+	}
+
+	// #US堆(用户字符串, UTF-16)逐条目统计
+	if (user_strings != nullptr) {
+		size_t off = 0;
+		size_t len_sum = 0, long_cnt = 0;
+		while (off < user_strings_size) {
+			uint32_t byte_len = 0;
+			const size_t used = read_compressed_uint(user_strings + off, user_strings_size - off, byte_len);
+			if (used == 0 || byte_len > user_strings_size - off - used) break;
+			const size_t chars = byte_len / 2; // UTF-16码元数(含尾标志字节的粗略口径)
+			if (chars > 0) {
+				++feats.user_strings_count;
+				len_sum += chars;
+				if (chars >= 30) ++long_cnt;
+			}
+			off += used + byte_len;
+		}
+		if (feats.user_strings_count > 0) {
+			feats.user_strings_length_mean = static_cast<double>(len_sum) / feats.user_strings_count;
+			feats.user_strings_long_ratio = static_cast<double>(long_cnt) / feats.user_strings_count;
+		}
+	}
+
+	// 保护器标记检测: 在字符串堆与用户字符串堆中扫描已知特征串
+	{
+		double marker_count = 0.0;
+		for (const char *marker : kProtectorMarkers) {
+			if (contains_marker(strings, strings_size, marker) || contains_marker(user_strings, user_strings_size, marker)) {
+				marker_count += 1.0;
+			}
+		}
+		feats.protector_marker_count = marker_count;
+	}
 
 	// #~头部的Valid位图和Rows数组直接给出各元数据表行数, 无需知道列布局。
 	if (tables == nullptr || tables_size < 24) return feats;

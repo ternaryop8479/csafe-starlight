@@ -314,12 +314,24 @@ struct DotnetFeatPack {
 	double generic_param_rows; ///< GenericParam表行数(混淆信号)
 	double method_spec_rows; ///< MethodSpec表行数(泛型实例化, 混淆信号)
 	double metadata_other_rows; ///< 长尾表行数聚合(MethodSemantics/ModuleRef/File/ExportedType/GenericParamConstraint)
+	double strings_count; ///< #Strings堆字符串数量
+	double strings_length_mean; ///< #Strings字符串平均长度
+	double strings_length_max; ///< #Strings字符串最大长度
+	double strings_long_ratio; ///< #Strings中长度>=30的字符串占比
+	double strings_digit_ratio; ///< #Strings字符中数字的平均占比
+	double strings_non_ascii_ratio; ///< #Strings字符中非ASCII字节的平均占比
+	double strings_high_entropy_ratio; ///< #Strings中高熵字符串占比
+	double strings_short_ratio; ///< #Strings中长度1~3的短符号占比
+	double user_strings_count; ///< #US堆字符串数量
+	double user_strings_length_mean; ///< #US字符串平均字符数
+	double user_strings_long_ratio; ///< #US中长度>=30的字符串占比
+	double protector_marker_count; ///< 命中的已知.NET保护器特征串种类数
 	double metadata_version_length; ///< 元数据版本字符串长度
 	double strings_entropy; ///< #Strings流字节熵
 	double user_strings_entropy; ///< #US流字节熵
 	double managed_resource_size; ///< CLR托管资源区大小
 
-	static constexpr SIZE_T kFieldCount = 41;
+	static constexpr SIZE_T kFieldCount = 53;
 };
 
 /**
@@ -370,7 +382,7 @@ struct SigFeatPack {
 };
 
 /**
- * @brief 所有维度的特征集合(共263维)
+ * @brief 所有维度的特征集合(共275维)
  */
 struct FeatPack {
 	// 来自tosSPM引擎推理过程及结果的特征数据

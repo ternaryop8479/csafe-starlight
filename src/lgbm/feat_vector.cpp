@@ -214,6 +214,10 @@
 	X(standalone_sig_rows) X(event_rows) X(property_rows) X(method_impl_rows) \
 	X(type_spec_rows) X(impl_map_rows) X(field_rva_rows) X(nested_class_rows) \
 	X(generic_param_rows) X(method_spec_rows) X(metadata_other_rows) \
+	X(strings_count) X(strings_length_mean) X(strings_length_max) X(strings_long_ratio) \
+	X(strings_digit_ratio) X(strings_non_ascii_ratio) X(strings_high_entropy_ratio) \
+	X(strings_short_ratio) X(user_strings_count) X(user_strings_length_mean) \
+	X(user_strings_long_ratio) X(protector_marker_count) \
 	X(metadata_version_length) X(strings_entropy) X(user_strings_entropy) \
 	X(managed_resource_size)
 
