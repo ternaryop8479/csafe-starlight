@@ -219,6 +219,10 @@ add_library(starlight_v3_lib STATIC
 	src/pe/view.cpp
 	src/pe/hist.cpp
 	src/lgbm/feat_extractor/tspm.cpp
+	src/authenticode/model.cpp
+	src/authenticode/trainer.cpp
+	src/authenticode/reasoner.cpp
+	src/pe/authenticode.cpp
 )
 set_target_properties(starlight_v3_lib PROPERTIES OUTPUT_NAME starlight_v3)
 
@@ -234,6 +238,7 @@ target_link_libraries(starlight_v3_lib
 		dep_lightgbm
 		xxhash
 		Threads::Threads
+		OpenSSL::Crypto
 )
 
 # ---- 命令行工具 ----
