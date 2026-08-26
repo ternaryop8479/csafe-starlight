@@ -244,6 +244,24 @@ struct BlockEntropyFeatPack {
 };
 
 /**
+ * @brief 来自Rich Header编译器指纹的特征数据(10维)
+ */
+struct RichHeaderFeatPack {
+	double present; ///< 是否存在可识别的Rich Header
+	double valid; ///< Rich Header结构是否完整有效
+	double entry_count; ///< Rich Header条目数
+	double total_count; ///< 所有条目的编译器产物计数之和
+	double max_entry_count; ///< 单条目最大产物计数
+	double distinct_product_count; ///< 不同ProductId数量
+	double min_build; ///< 最小BuildId
+	double max_build; ///< 最大BuildId
+	double build_span; ///< BuildId跨度
+	double present_without_debug; ///< 存在Rich Header但没有Debug目录的可疑组合
+
+	static constexpr SIZE_T kFieldCount = 10;
+};
+
+/**
  * @brief 来自白签名表推理的特征数据(2维)
  */
 struct SigFeatPack {
@@ -255,7 +273,7 @@ struct SigFeatPack {
 };
 
 /**
- * @brief 所有维度的特征集合(共180维)
+ * @brief 所有维度的特征集合(共190维)
  */
 struct FeatPack {
 	// 来自tosSPM引擎推理过程及结果的特征数据
@@ -272,6 +290,9 @@ struct FeatPack {
 
 	// 来自Authenticode白签名表推理的特征数据
 	SigFeatPack sig_feats;
+
+	// 从PE Rich Header提取的编译器指纹特征数据
+	RichHeaderFeatPack rich_header_feats;
 };
 
 } // namespace starlight_v3

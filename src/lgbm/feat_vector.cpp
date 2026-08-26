@@ -186,6 +186,19 @@
 	X(sig_confidence)        \
 	X(signed_present)
 
+// Rich Header特征宏列表
+#define RICH_HEADER_FEAT_FIELDS(X) \
+	X(present)                 \
+	X(valid)                   \
+	X(entry_count)             \
+	X(total_count)             \
+	X(max_entry_count)         \
+	X(distinct_product_count)  \
+	X(min_build)               \
+	X(max_build)               \
+	X(build_span)              \
+	X(present_without_debug)
+
 // 用于编译期统计维度数的宏
 #define FEAT_COUNT_ONE(name) +1
 static_assert(0 EFG_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kEfgFeatDims, "EFGFeatPack field count does not match EFG_FEAT_FIELDS macro");
@@ -197,6 +210,8 @@ static_assert(starlight_v3::TSPMFeatPack::kFieldCount == starlight_v3::lgbm::kTs
 static_assert(starlight_v3::PEFeatPack::kFieldCount == starlight_v3::lgbm::kPeFeatDims, "PEFeatPack got new fields but PE_FEAT_FIELDS macro not synced");
 static_assert(0 SIG_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kSigFeatDims, "SigFeatPack field count does not match SIG_FEAT_FIELDS macro");
 static_assert(starlight_v3::SigFeatPack::kFieldCount == starlight_v3::lgbm::kSigFeatDims, "SigFeatPack got new fields but SIG_FEAT_FIELDS macro not synced");
+static_assert(0 RICH_HEADER_FEAT_FIELDS(FEAT_COUNT_ONE) == starlight_v3::lgbm::kRichHeaderFeatDims, "RichHeaderFeatPack field count does not match RICH_HEADER_FEAT_FIELDS macro");
+static_assert(starlight_v3::RichHeaderFeatPack::kFieldCount == starlight_v3::lgbm::kRichHeaderFeatDims, "RichHeaderFeatPack got new fields but RICH_HEADER_FEAT_FIELDS macro not synced");
 #undef FEAT_COUNT_ONE
 
 // 数组字段维度计数(每个数组按元素数计入)
@@ -235,6 +250,11 @@ SIZE_T serialize_feat_pack(const FeatPack &feats, double *out) {
 	SIG_FEAT_FIELDS(EMIT_SIG_FIELD)
 #undef EMIT_SIG_FIELD
 
+	// 序列化Rich Header特征(10维)
+#define EMIT_RICH_FIELD(name) *out++ = static_cast<double>(feats.rich_header_feats.name);
+	RICH_HEADER_FEAT_FIELDS(EMIT_RICH_FIELD)
+#undef EMIT_RICH_FIELD
+
 	return kTotalFeatDims;
 }
 
@@ -245,3 +265,5 @@ SIZE_T serialize_feat_pack(const FeatPack &feats, double *out) {
 #undef TSPM_FEAT_FIELDS
 #undef PE_FEAT_FIELDS
 #undef BLOCK_ENTROPY_FEAT_FIELDS
+#undef SIG_FEAT_FIELDS
+#undef RICH_HEADER_FEAT_FIELDS

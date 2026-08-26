@@ -24,6 +24,7 @@
 #include "lgbm/feat_extractor/tspm.h"
 #include "lgbm/feat_vector.h"
 #include "pe/authenticode.h"
+#include "pe/rich_header.h"
 #include "pe/view.h"
 #include "trainer.h"
 #include "tspm/reasoner.h"
@@ -226,6 +227,10 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					feats.pe_feats = lgbm::extract_pe_feats(sample.file_path, &feats.block_entropy_feats);
 					feats.sig_feats.sig_confidence = mal_sig_conf[idx];
 					feats.sig_feats.signed_present = mal_identities[idx].present ? 1.0 : 0.0;
+					starlight_v3::pe::PeView rich_view;
+					if (starlight_v3::pe::PeView::load(sample.file_path, rich_view)) {
+						feats.rich_header_feats = starlight_v3::pe::extract_rich_header_feats(rich_view);
+					}
 					lgbm::serialize_feat_pack(feats, feature_matrix.data() + idx * lgbm::kTotalFeatDims);
 				} catch (const std::exception &e) {
 					// 线程池会吞掉任务异常, 这里显式上报防止该样本特征静默全零进入训练
@@ -256,6 +261,10 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					feats.pe_feats = lgbm::extract_pe_feats(sample.file_path, &feats.block_entropy_feats);
 					feats.sig_feats.sig_confidence = ben_sig_conf[idx];
 					feats.sig_feats.signed_present = ben_identities[idx].present ? 1.0 : 0.0;
+					starlight_v3::pe::PeView rich_view;
+					if (starlight_v3::pe::PeView::load(sample.file_path, rich_view)) {
+						feats.rich_header_feats = starlight_v3::pe::extract_rich_header_feats(rich_view);
+					}
 					lgbm::serialize_feat_pack(feats, feature_matrix.data() + (mal_count + idx) * lgbm::kTotalFeatDims);
 				} catch (const std::exception &e) {
 					++feature_fail_count;

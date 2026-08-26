@@ -19,6 +19,7 @@
 #include "lgbm/feat_extractor/tspm.h"
 #include "lgbm/feat_vector.h"
 #include "pe/authenticode.h"
+#include "pe/rich_header.h"
 #include "pe/view.h"
 #include "reasoner.h"
 
@@ -173,6 +174,7 @@ AnalysisResult Reasoner::analyze_efg(const EFG &efg, const std::string &file_pat
 	const authenticode::Reasoner sig_reasoner(model_.sig_table());
 	result.feats.sig_feats.sig_confidence = sig_reasoner.confidence(identity);
 	result.feats.sig_feats.signed_present = identity.present ? 1.0 : 0.0;
+	result.feats.rich_header_feats = starlight_v3::pe::extract_rich_header_feats(pv);
 
 	// LightGBM打分
 	double features[lgbm::kTotalFeatDims];
