@@ -216,7 +216,8 @@ add_library(starlight_v3_lib STATIC
 	src/lgbm/trainer.cpp
 	src/lgbm/feat_extractor/efg.cpp
 	src/lgbm/feat_extractor/pe.cpp
-	src/lgbm/feat_extractor/byte_hist.cpp
+	src/pe/view.cpp
+	src/pe/hist.cpp
 	src/lgbm/feat_extractor/tspm.cpp
 )
 set_target_properties(starlight_v3_lib PROPERTIES OUTPUT_NAME starlight_v3)

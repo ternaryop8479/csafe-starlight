@@ -22,7 +22,7 @@
 
 #include "basic/types.h"
 #include "lgbm/feat_extractor/pe.h"
-#include "lgbm/feat_extractor/byte_hist.h"
+#include "pe/hist.h"
 #include "pe_compat.h"
 
 #ifndef IMAGE_SCN_MEM_EXECUTE
@@ -1106,7 +1106,7 @@ PEFeatPack extract_pe_feats(const std::string &file_path, BlockEntropyFeatPack *
 
 	// 同步提取分块熵特征，复用本次PE解析的文件字节，避免重复读盘
 	if (block_entropy_out != nullptr && pe->fileBuffer != nullptr && pe->fileBuffer->buf != nullptr) {
-		*block_entropy_out = extract_block_entropy_feats(pe->fileBuffer->buf, pe->fileBuffer->bufLen);
+		*block_entropy_out = starlight_v3::pe::extract_block_entropy_feats(pe->fileBuffer->buf, pe->fileBuffer->bufLen);
 	}
 
 	return feats;

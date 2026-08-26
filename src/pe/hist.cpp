@@ -1,15 +1,15 @@
 /**
- * @file lgbm/feat_extractor/byte_hist.cpp
+ * @file pe/hist.cpp
  * @brief 文件分块熵特征提取器实现
  * @author ternaryop8479
- * @date 2026-08-18
+ * @date 2026-08-26
  * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  */
 
 #include <array>
 #include <cmath>
 
-#include "lgbm/feat_extractor/byte_hist.h"
+#include "pe/hist.h"
 
 namespace {
 
@@ -38,7 +38,7 @@ double block_shannon_entropy(const uint8_t *data, SIZE_T len) {
 
 } // namespace
 
-namespace starlight_v3::lgbm {
+namespace starlight_v3::pe {
 
 BlockEntropyFeatPack extract_block_entropy_feats(const uint8_t *data, SIZE_T len) {
 	BlockEntropyFeatPack feats = {}; // 值初始化，空输入保持全零
@@ -59,4 +59,4 @@ BlockEntropyFeatPack extract_block_entropy_feats(const uint8_t *data, SIZE_T len
 	return feats;
 }
 
-} // namespace starlight_v3::lgbm
+} // namespace starlight_v3::pe

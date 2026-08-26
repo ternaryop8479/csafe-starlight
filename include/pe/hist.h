@@ -1,19 +1,19 @@
 /**
- * @file lgbm/feat_extractor/byte_hist.h
+ * @file pe/hist.h
  * @brief 文件分块熵特征提取器
  * @author ternaryop8479
- * @date 2026-08-18
+ * @date 2026-08-26
  * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  */
 
-#ifndef CSAFE_STARLIGHT_V3_INCLUDE_LGBM_FEAT_EXTRACTOR_BYTE_HIST_H
-#define CSAFE_STARLIGHT_V3_INCLUDE_LGBM_FEAT_EXTRACTOR_BYTE_HIST_H
+#ifndef CSAFE_STARLIGHT_V3_INCLUDE_PE_HIST_H
+#define CSAFE_STARLIGHT_V3_INCLUDE_PE_HIST_H
 
 #include <cstdint>
 
 #include "basic/feat_pack.h"
 
-namespace starlight_v3::lgbm {
+namespace starlight_v3::pe {
 
 /**
  * @brief 从原始文件字节提取分块熵特征(16维)
@@ -24,6 +24,6 @@ namespace starlight_v3::lgbm {
  */
 BlockEntropyFeatPack extract_block_entropy_feats(const uint8_t *data, SIZE_T len);
 
-} // namespace starlight_v3::lgbm
+} // namespace starlight_v3::pe
 
 #endif
