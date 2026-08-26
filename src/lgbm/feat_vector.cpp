@@ -209,8 +209,13 @@
 	X(metadata_major) X(metadata_minor) X(stream_count) X(strings_size) \
 	X(user_strings_size) X(blob_size) X(guid_size) X(type_ref_rows) X(type_def_rows) \
 	X(method_def_rows) X(field_rows) X(member_ref_rows) X(custom_attribute_rows) \
-	X(assembly_ref_rows) X(resource_rows) X(metadata_version_length) X(strings_entropy) \
-	X(user_strings_entropy) X(managed_resource_size)
+	X(assembly_ref_rows) X(resource_rows) X(module_rows) X(param_rows) \
+	X(interface_impl_rows) X(constant_rows) X(decl_security_rows) X(class_layout_rows) \
+	X(standalone_sig_rows) X(event_rows) X(property_rows) X(method_impl_rows) \
+	X(type_spec_rows) X(impl_map_rows) X(field_rva_rows) X(nested_class_rows) \
+	X(generic_param_rows) X(method_spec_rows) X(metadata_other_rows) \
+	X(metadata_version_length) X(strings_entropy) X(user_strings_entropy) \
+	X(managed_resource_size)
 
 // IAT/导入目录结构特征宏列表
 #define IAT_FEAT_FIELDS(X) \

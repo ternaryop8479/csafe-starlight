@@ -297,12 +297,29 @@ struct DotnetFeatPack {
 	double custom_attribute_rows; ///< CustomAttribute表行数
 	double assembly_ref_rows; ///< AssemblyRef表行数
 	double resource_rows; ///< ManifestResource表行数
+	double module_rows; ///< Module表行数
+	double param_rows; ///< Param表行数
+	double interface_impl_rows; ///< InterfaceImpl表行数
+	double constant_rows; ///< Constant表行数
+	double decl_security_rows; ///< DeclSecurity表行数(声明式权限/安全声明)
+	double class_layout_rows; ///< ClassLayout表行数
+	double standalone_sig_rows; ///< StandAloneSig表行数
+	double event_rows; ///< Event表行数
+	double property_rows; ///< Property表行数
+	double method_impl_rows; ///< MethodImpl表行数
+	double type_spec_rows; ///< TypeSpec表行数
+	double impl_map_rows; ///< ImplMap表行数(P/Invoke互操作)
+	double field_rva_rows; ///< FieldRVA表行数(内嵌数据, 加壳/loader信号)
+	double nested_class_rows; ///< NestedClass表行数(混淆信号)
+	double generic_param_rows; ///< GenericParam表行数(混淆信号)
+	double method_spec_rows; ///< MethodSpec表行数(泛型实例化, 混淆信号)
+	double metadata_other_rows; ///< 长尾表行数聚合(MethodSemantics/ModuleRef/File/ExportedType/GenericParamConstraint)
 	double metadata_version_length; ///< 元数据版本字符串长度
 	double strings_entropy; ///< #Strings流字节熵
 	double user_strings_entropy; ///< #US流字节熵
 	double managed_resource_size; ///< CLR托管资源区大小
 
-	static constexpr SIZE_T kFieldCount = 24;
+	static constexpr SIZE_T kFieldCount = 41;
 };
 
 /**
@@ -353,7 +370,7 @@ struct SigFeatPack {
 };
 
 /**
- * @brief 所有维度的特征集合(共246维)
+ * @brief 所有维度的特征集合(共263维)
  */
 struct FeatPack {
 	// 来自tosSPM引擎推理过程及结果的特征数据

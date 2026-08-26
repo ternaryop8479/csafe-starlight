@@ -162,6 +162,23 @@ DotnetFeatPack extract_dotnet_feats(const PeView &view) {
 	feats.custom_attribute_rows = rows[12];
 	feats.assembly_ref_rows = rows[35];
 	feats.resource_rows = rows[40];
+	feats.module_rows = rows[0];
+	feats.param_rows = rows[8];
+	feats.interface_impl_rows = rows[9];
+	feats.constant_rows = rows[11];
+	feats.decl_security_rows = rows[14];
+	feats.class_layout_rows = rows[15];
+	feats.standalone_sig_rows = rows[17];
+	feats.event_rows = rows[20];
+	feats.property_rows = rows[23];
+	feats.method_impl_rows = rows[25];
+	feats.type_spec_rows = rows[27];
+	feats.impl_map_rows = rows[28];
+	feats.field_rva_rows = rows[29];
+	feats.nested_class_rows = rows[41];
+	feats.generic_param_rows = rows[42];
+	feats.method_spec_rows = rows[43];
+	feats.metadata_other_rows = static_cast<double>(rows[24] + rows[26] + rows[38] + rows[39] + rows[44]);
 	return feats;
 }
 
