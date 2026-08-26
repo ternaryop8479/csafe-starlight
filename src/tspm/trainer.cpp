@@ -8,9 +8,11 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <climits>
 #include <cmath>
 #include <cstdint>
 #include <mutex>
+#include <numeric>
 #include <queue>
 #include <string>
 #include <unordered_map>
@@ -133,6 +135,8 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 
 	banned_apis_.clear(); // 清除banned_apis_表，防止干扰训练
 
+	std::vector<std::pair<APIID_T, double>> temp_banned_apis; ///< 临时的banned_apis_数组，存储所有被ban的api
+
 	// 自动计算噪声api集合
 	if (!near_zero(config_.noisy_api_max_mal_over_ben) && !near_zero(config_.noisy_api_min_benign_ratio)) {
 		const std::vector<std::string> &api_set = model.api_table.get_table(); // 获取api表的字符串形式
@@ -148,9 +152,35 @@ Model Trainer::train(std::vector<EFG> &malware_dataset, std::vector<EFG> &benign
 
 			// 仅当两个条件同时满足时将其加入banlist
 			if (bensupport >= config_.noisy_api_min_benign_ratio && malsupport / bensupport <= config_.noisy_api_max_mal_over_ben) {
-				banned_apis_.insert(api_id);
+				temp_banned_apis.emplace_back(api_id, std::abs((malsupport - bensupport) / (malsupport + bensupport)));
 			}
 		}
+	}
+
+	// 如果所有API都满足条件就输出警告
+	if (temp_banned_apis.empty()) {
+		log_by_callback("[Trainer::train()] WARN: No noisy api was detected.");
+	}
+
+	const SIZE_T real_max_noisy_api_count = config_.max_noisy_api_count ? std::min(static_cast<SIZE_T>(temp_banned_apis.size()), config_.max_noisy_api_count) : temp_banned_apis.size(); ///< 实际要ban的api总数
+	if (!temp_banned_apis.empty() && real_max_noisy_api_count == temp_banned_apis.size()) { // 所有初筛算出的noisy_api都被保留
+		log_by_callback("[Trainer::train()] WARN: All candidate apis are kept (max_noisy_api_count >= total candidates).\n");
+	}
+
+	// 筛选出前max_noisy_api_count个API
+	if (real_max_noisy_api_count && real_max_noisy_api_count < temp_banned_apis.size()) {
+		std::nth_element(
+			temp_banned_apis.begin(),
+			temp_banned_apis.begin() + real_max_noisy_api_count,
+			temp_banned_apis.end(),
+			[](const auto &a, const auto &b) {
+				return a.second < b.second;
+			});
+	}
+
+	// 生成banned_apis_表
+	for (SIZE_T i = 0; i < real_max_noisy_api_count; ++i) {
+		banned_apis_.insert(temp_banned_apis[i].first);
 	}
 
 	// 忽略掉不存在于解析列表中的API(具体是不是冗余逻辑我已经忘了，但是占不了多少时间，跑一下满足洁癖)

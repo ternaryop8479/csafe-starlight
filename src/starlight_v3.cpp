@@ -279,6 +279,8 @@ bool load_train_config(const std::string &config_path, starlight_v3::TrainConfig
 					config.tspm_config.noisy_api_min_benign_ratio = std::stod(value_str);
 				} else if (field == "noisy_api_max_mal_over_ben") {
 					config.tspm_config.noisy_api_max_mal_over_ben = std::stod(value_str);
+				} else if (field == "max_noisy_api_count") {
+					config.tspm_config.max_noisy_api_count = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
 				} else {
 					std::cerr << "[Error] " << config_path << ":" << line_num << " 未知tspm字段: " << field << std::endl;
 					return false;
