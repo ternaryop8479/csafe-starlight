@@ -25,9 +25,9 @@ bool has(const std::string &name, std::initializer_list<const char *> needles) {
 
 } // namespace
 
-CapabilityFeatPack extract_capability_feats(const PeView &view) {
+CapabilityFeatPack extract_capability_feats(const std::vector<ImportEntry> &imports) {
 	CapabilityFeatPack feats = {};
-	for (const auto &entry : enumerate_imports(view)) {
+	for (const auto &entry : imports) {
 		const std::string &name = entry.function_name;
 		if (has(name, { "WriteProcessMemory", "VirtualAllocEx", "CreateRemoteThread", "SetWindowsHookEx" })) ++feats.injection_count;
 		if (has(name, { "Debugger", "DebugActiveProcess", "NtQueryInformationProcess", "OutputDebugString" })) ++feats.anti_debug_count;

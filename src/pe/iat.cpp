@@ -40,9 +40,8 @@ bool system_dll(const std::string &name) {
 
 } // namespace
 
-IatFeatPack extract_iat_feats(const PeView &view) {
+IatFeatPack extract_iat_feats(const PeView &view, const std::vector<ImportEntry> &imports) {
 	IatFeatPack feats = {};
-	const auto imports = enumerate_imports(view);
 	const double count = static_cast<double>(imports.size());
 	feats.import_count = count;
 	if (count != 0.0) {

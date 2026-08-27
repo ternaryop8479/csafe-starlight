@@ -23,6 +23,13 @@ struct ImportEntry {
 	bool ordinal = false; ///< 是否为序号导入
 };
 
+/**
+ * @brief 枚举PE导入目录中的全部导入项
+ * @param view 目标PE文件视图
+ * @note 解析开销与导入表规模成正比, 需要多组特征共用时应由上层调用一次后下传结果,
+ * 避免同一文件的导入表被反复解析(见extract_iat_feats/extract_capability_feats)
+ * @return 导入项列表, 无导入目录或目录畸形时为空
+ */
 std::vector<ImportEntry> enumerate_imports(const PeView &view);
 
 } // namespace starlight_v3::pe

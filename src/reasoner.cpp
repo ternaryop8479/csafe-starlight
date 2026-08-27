@@ -22,6 +22,7 @@
 #include "pe/rich_header.h"
 #include "pe/dotnet.h"
 #include "pe/iat.h"
+#include "pe/imports.h"
 #include "pe/capability.h"
 #include "pe/view.h"
 #include "reasoner.h"
@@ -179,8 +180,9 @@ AnalysisResult Reasoner::analyze_efg(const EFG &efg, const std::string &file_pat
 	result.feats.sig_feats.signed_present = identity.present ? 1.0 : 0.0;
 	result.feats.rich_header_feats = starlight_v3::pe::extract_rich_header_feats(pv);
 	result.feats.dotnet_feats = starlight_v3::pe::extract_dotnet_feats(pv);
-	result.feats.iat_feats = starlight_v3::pe::extract_iat_feats(pv);
-	result.feats.capability_feats = starlight_v3::pe::extract_capability_feats(pv);
+	const std::vector<starlight_v3::pe::ImportEntry> imports = starlight_v3::pe::enumerate_imports(pv);
+	result.feats.iat_feats = starlight_v3::pe::extract_iat_feats(pv, imports);
+	result.feats.capability_feats = starlight_v3::pe::extract_capability_feats(imports);
 
 	// LightGBM打分
 	double features[lgbm::kTotalFeatDims];

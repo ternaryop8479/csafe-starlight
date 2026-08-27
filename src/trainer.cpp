@@ -27,6 +27,7 @@
 #include "pe/rich_header.h"
 #include "pe/dotnet.h"
 #include "pe/iat.h"
+#include "pe/imports.h"
 #include "pe/capability.h"
 #include "pe/view.h"
 #include "trainer.h"
@@ -234,8 +235,10 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					if (starlight_v3::pe::PeView::load(sample.file_path, rich_view)) {
 						feats.rich_header_feats = starlight_v3::pe::extract_rich_header_feats(rich_view);
 						feats.dotnet_feats = starlight_v3::pe::extract_dotnet_feats(rich_view);
-						feats.iat_feats = starlight_v3::pe::extract_iat_feats(rich_view);
-						feats.capability_feats = starlight_v3::pe::extract_capability_feats(rich_view);
+						// 导入表解析一次后由IAT与能力两组特征共用
+						const std::vector<starlight_v3::pe::ImportEntry> imports = starlight_v3::pe::enumerate_imports(rich_view);
+						feats.iat_feats = starlight_v3::pe::extract_iat_feats(rich_view, imports);
+						feats.capability_feats = starlight_v3::pe::extract_capability_feats(imports);
 					}
 					lgbm::serialize_feat_pack(feats, feature_matrix.data() + idx * lgbm::kTotalFeatDims);
 				} catch (const std::exception &e) {
@@ -271,8 +274,10 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					if (starlight_v3::pe::PeView::load(sample.file_path, rich_view)) {
 						feats.rich_header_feats = starlight_v3::pe::extract_rich_header_feats(rich_view);
 						feats.dotnet_feats = starlight_v3::pe::extract_dotnet_feats(rich_view);
-						feats.iat_feats = starlight_v3::pe::extract_iat_feats(rich_view);
-						feats.capability_feats = starlight_v3::pe::extract_capability_feats(rich_view);
+						// 导入表解析一次后由IAT与能力两组特征共用
+						const std::vector<starlight_v3::pe::ImportEntry> imports = starlight_v3::pe::enumerate_imports(rich_view);
+						feats.iat_feats = starlight_v3::pe::extract_iat_feats(rich_view, imports);
+						feats.capability_feats = starlight_v3::pe::extract_capability_feats(imports);
 					}
 					lgbm::serialize_feat_pack(feats, feature_matrix.data() + (mal_count + idx) * lgbm::kTotalFeatDims);
 				} catch (const std::exception &e) {
