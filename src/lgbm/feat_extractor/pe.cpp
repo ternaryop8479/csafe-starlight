@@ -714,7 +714,16 @@ uint64_t rva_to_file_offset(uint64_t rva, const std::vector<SectionInfo> &sectio
 struct ImportInfo {
 	std::string dll;
 	std::string func;
+	bool ordinal = false; ///< 是否为序号导入(此时func为pe-parse合成的占位名, 非真实API名)
 };
+
+// 判断pe-parse给出的symbol是否为序号导入的合成占位名
+// pe-parse对序号导入不返回空串, 而是合成"ORDINAL_<DLL名>_<序号>"(如ORDINAL_MFC42.DLL_4698),
+// 若按真实API名参与统计会污染API名长度/字符熵/去重计数等维度
+bool is_ordinal_symbol(const std::string &symbol) {
+	static constexpr char kOrdinalPrefix[] = "ORDINAL_";
+	return symbol.rfind(kOrdinalPrefix, 0) == 0;
+}
 
 // 导入表迭代回调: 记录每个导入函数所属DLL与函数名
 int import_callback(void *ctx, const peparse::VA &, const std::string &module, const std::string &symbol) {
@@ -722,6 +731,7 @@ int import_callback(void *ctx, const peparse::VA &, const std::string &module, c
 	ImportInfo info;
 	info.dll = module;
 	info.func = symbol;
+	info.ordinal = symbol.empty() || is_ordinal_symbol(symbol);
 	imports->push_back(std::move(info));
 	return 0;
 }
@@ -906,7 +916,9 @@ PEFeatPack extract_pe_feats(const pe::PeView &view, BlockEntropyFeatPack *block_
 		}
 	}
 
-	feats.entry_section_index = entry_section_index;
+	// 入口点所在节段下标, 特征值按1起编号(0表示入口点不落在任何节段内, 加壳/畸形样本常见),
+	// 不能把INVALID_NUM直接当特征值输出: 4294967295会与合法下标混在同一条数轴上被模型当极大数切分
+	feats.entry_section_index = entry_section_index != INVALID_NUM ? entry_section_index + 1 : 0;
 	feats.entry_section_entropy = entry_section_index != INVALID_NUM ? sections[entry_section_index].entropy : 0.0;
 	feats.raw_size_mean = section_count > 0 ? (double)raw_size_sum / (double)section_count : 0.0;
 	feats.raw_size_max = raw_size_max;
@@ -973,7 +985,8 @@ PEFeatPack extract_pe_feats(const pe::PeView &view, BlockEntropyFeatPack *block_
 
 		for (const auto &imp : imports) {
 			++dll_freq[imp.dll];
-			if (imp.func.empty()) {
+			// 序号导入无真实API名, 不参与任何按名统计(去重计数/名长/字符熵/能力分类)
+			if (imp.ordinal) {
 				++ordinal_count;
 				continue;
 			}
