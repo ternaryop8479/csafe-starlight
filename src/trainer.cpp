@@ -18,17 +18,13 @@
 #include "external/BS_thread_pool.hpp"
 
 #include "lgbm/feat_extractor/efg.h"
-#include "lgbm/feat_extractor/pe.h"
+#include "lgbm/feat_extractor/static_feats.h"
 #include "authenticode/reasoner.h"
 #include "authenticode/trainer.h"
 #include "lgbm/feat_extractor/tspm.h"
 #include "lgbm/feat_vector.h"
+#include "efg_generator.h"
 #include "pe/authenticode.h"
-#include "pe/rich_header.h"
-#include "pe/dotnet.h"
-#include "pe/iat.h"
-#include "pe/imports.h"
-#include "pe/capability.h"
 #include "pe/view.h"
 #include "trainer.h"
 #include "tspm/reasoner.h"
@@ -36,13 +32,37 @@
 namespace {
 
 // 提取单个PE文件的签名者身份(供签名扫描阶段并行调用)
-starlight_v3::pe::CertIdentity scan_one_signature(const std::string &file_path) {
-	starlight_v3::pe::CertIdentity identity;
+starlight_v3::pe::CertIdentity scan_one_signature(const starlight_v3::TrainSample &sample) {
+	// 命中预取则零I/O
+	if (sample.cert_identity.has_value()) {
+		return *sample.cert_identity;
+	}
 	starlight_v3::pe::PeView view;
-	if (!starlight_v3::pe::PeView::load(file_path, view)) {
-		return identity; // 非法PE: 返回present=false的空身份
+	if (!starlight_v3::pe::PeView::load(sample.file_path, view)) {
+		return starlight_v3::pe::CertIdentity {}; // 非法PE: 返回present=false的空身份
 	}
 	return starlight_v3::pe::inspect_signature(view);
+}
+
+// 取一个样本的静态特征组: 命中预取则零I/O, 否则现场读盘提取
+// 只覆盖静态特征组, 其余特征组(tspm/efg/sig)保持调用方已填的值
+void load_static_feats(const starlight_v3::TrainSample &sample, starlight_v3::FeatPack &feats) {
+	if (sample.static_feats.has_value()) {
+		const starlight_v3::FeatPack &cache = *sample.static_feats;
+		feats.pe_feats = cache.pe_feats;
+		feats.block_entropy_feats = cache.block_entropy_feats;
+		feats.rich_header_feats = cache.rich_header_feats;
+		feats.dotnet_feats = cache.dotnet_feats;
+		feats.iat_feats = cache.iat_feats;
+		feats.capability_feats = cache.capability_feats;
+		return;
+	}
+
+	// 未预取: 现场读入文件视图后提取(非法PE则静态特征保持全零)
+	starlight_v3::pe::PeView view;
+	if (starlight_v3::pe::PeView::load(sample.file_path, view)) {
+		starlight_v3::lgbm::extract_static_feats(view, feats);
+	}
 }
 
 // 剔除数据集中的无边EFG, 返回被剔除的数量
@@ -104,6 +124,36 @@ std::vector<std::vector<size_t>> split_folds(size_t total, starlight_v3::SIZE_T 
 
 namespace starlight_v3 {
 
+// 从PE文件准备一个训练样本(单次读盘完成EFG、签名者身份与可选的静态特征预取)
+bool prepare_train_sample(const std::string &file_path, bool prefetch_static_feats, TrainSample &out) {
+	// 载入文件视图: 后续所有解析共用这一份字节
+	pe::PeView view;
+	if (!pe::PeView::load(file_path, view)) {
+		return false;
+	}
+
+	// EFG生成失败(非PE/严重损坏)时整个样本作废
+	auto [success, efg] = generate_efg(view);
+	if (!success) {
+		return false;
+	}
+
+	TrainSample sample;
+	sample.efg = std::move(efg);
+	sample.file_path = file_path;
+	if (prefetch_static_feats) {
+		// 静态特征提取顺带产出签名者身份, 无需额外解析
+		FeatPack feats = {};
+		sample.cert_identity = lgbm::extract_static_feats(view, feats);
+		sample.static_feats = std::move(feats);
+	} else {
+		sample.cert_identity = pe::inspect_signature(view);
+	}
+
+	out = std::move(sample);
+	return true;
+}
+
 // 执行完整训练流程
 Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &malware_samples, const std::vector<TrainSample> &benign_samples) {
 	// 参数校验
@@ -118,7 +168,7 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 	std::function<void(const std::string &)> log_callback = config.log_callback ? config.log_callback : [](const std::string &) {
 	};
 
-	// 签名扫描: 并行提取全部样本的签名者身份, 聚合构建白签名表,
+	// 签名扫描: 收集全部样本的签名者身份, 聚合构建白签名表,
 	// 同时缓存每样本的签名置信度(表构建后查表得到, 特征生成阶段直接取用)
 	// 注: 白签名表为聚合身份声誉统计而非样本级预测目标, 故基于全量语料一次构建, 不融入交叉训练
 	authenticode::Trainer sig_trainer(config.authenticode_config, log_callback);
@@ -134,11 +184,11 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					break;
 				}
 				if (i < malware_samples.size()) {
-					mal_identities[i] = scan_one_signature(malware_samples[i].file_path);
+					mal_identities[i] = scan_one_signature(malware_samples[i]);
 					sig_trainer.ingest(mal_identities[i], true);
 				} else {
 					const size_t bi = i - malware_samples.size();
-					ben_identities[bi] = scan_one_signature(benign_samples[bi].file_path);
+					ben_identities[bi] = scan_one_signature(benign_samples[bi]);
 					sig_trainer.ingest(ben_identities[bi], false);
 				}
 			}
@@ -222,24 +272,15 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					tspm::AnalysisResult result = reasoner.analyze_efg(sample.efg, true);
 
 					// 提取三组特征并序列化
-					FeatPack feats;
+					FeatPack feats = {};
 					feats.efg_feats = lgbm::extract_efg_feats(sample.efg);
 					feats.tspm_feats = lgbm::extract_tspm_feats(result, sample.efg);
 					// 依旧好孩子要注意释放内存
 					result.evidence_trees.clear();
 					result.evidence_trees.shrink_to_fit();
-					feats.pe_feats = lgbm::extract_pe_feats(sample.file_path, &feats.block_entropy_feats);
+					load_static_feats(sample, feats);
 					feats.sig_feats.sig_confidence = mal_sig_conf[idx];
 					feats.sig_feats.signed_present = mal_identities[idx].present ? 1.0 : 0.0;
-					starlight_v3::pe::PeView rich_view;
-					if (starlight_v3::pe::PeView::load(sample.file_path, rich_view)) {
-						feats.rich_header_feats = starlight_v3::pe::extract_rich_header_feats(rich_view);
-						feats.dotnet_feats = starlight_v3::pe::extract_dotnet_feats(rich_view);
-						// 导入表解析一次后由IAT与能力两组特征共用
-						const std::vector<starlight_v3::pe::ImportEntry> imports = starlight_v3::pe::enumerate_imports(rich_view);
-						feats.iat_feats = starlight_v3::pe::extract_iat_feats(rich_view, imports);
-						feats.capability_feats = starlight_v3::pe::extract_capability_feats(imports);
-					}
 					lgbm::serialize_feat_pack(feats, feature_matrix.data() + idx * lgbm::kTotalFeatDims);
 				} catch (const std::exception &e) {
 					// 线程池会吞掉任务异常, 这里显式上报防止该样本特征静默全零进入训练
@@ -261,24 +302,15 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 					tspm::Reasoner reasoner(tspm_model);
 					tspm::AnalysisResult result = reasoner.analyze_efg(sample.efg, true);
 
-					FeatPack feats;
+					FeatPack feats = {};
 					feats.efg_feats = lgbm::extract_efg_feats(sample.efg);
 					feats.tspm_feats = lgbm::extract_tspm_feats(result, sample.efg);
 					// 释放内存
 					result.evidence_trees.clear();
 					result.evidence_trees.shrink_to_fit();
-					feats.pe_feats = lgbm::extract_pe_feats(sample.file_path, &feats.block_entropy_feats);
+					load_static_feats(sample, feats);
 					feats.sig_feats.sig_confidence = ben_sig_conf[idx];
 					feats.sig_feats.signed_present = ben_identities[idx].present ? 1.0 : 0.0;
-					starlight_v3::pe::PeView rich_view;
-					if (starlight_v3::pe::PeView::load(sample.file_path, rich_view)) {
-						feats.rich_header_feats = starlight_v3::pe::extract_rich_header_feats(rich_view);
-						feats.dotnet_feats = starlight_v3::pe::extract_dotnet_feats(rich_view);
-						// 导入表解析一次后由IAT与能力两组特征共用
-						const std::vector<starlight_v3::pe::ImportEntry> imports = starlight_v3::pe::enumerate_imports(rich_view);
-						feats.iat_feats = starlight_v3::pe::extract_iat_feats(rich_view, imports);
-						feats.capability_feats = starlight_v3::pe::extract_capability_feats(imports);
-					}
 					lgbm::serialize_feat_pack(feats, feature_matrix.data() + (mal_count + idx) * lgbm::kTotalFeatDims);
 				} catch (const std::exception &e) {
 					++feature_fail_count;

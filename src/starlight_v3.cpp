@@ -69,28 +69,23 @@ size_t parse_size_arg(const char *str, size_t default_value, const char *arg_nam
 	}
 }
 
-// 从指定文件夹加载EFG数据集, 可选输出每个EFG对应的源文件路径:
-// 递归遍历目录收集文件路径, 带数量上限与扩展名过滤(大小写不敏感);
-// 按硬件并发数起工作线程并行生成EFG, 结果按下标写入并原子计数;
-// 最后压缩出成功生成EFG的结果集, 若paths_out非空则同步输出对应源文件路径.
-std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t max_dataset_size, size_t thread_count = 0, const std::unordered_set<std::string> &allowed_extensions = {}, std::vector<fs::path> *paths_out = nullptr) {
-	std::vector<starlight_v3::EFG> empty_result;
+// 递归收集文件夹下的常规文件路径, 带数量上限与扩展名过滤(大小写不敏感):
+// 路径非法时打印错误并返回空列表, 遍历中途出错则保留已收集的部分.
+std::vector<fs::path> collect_file_paths(const fs::path &folder_path, size_t max_count, const std::unordered_set<std::string> &allowed_extensions) {
+	std::vector<fs::path> file_paths;
 	if (!fs::exists(folder_path)) {
 		std::cerr << "[Error] 路径不存在: " << folder_path << std::endl;
-		return empty_result;
+		return file_paths;
 	}
 	if (!fs::is_directory(folder_path)) {
 		std::cerr << "[Error] 路径不是文件夹: " << folder_path << std::endl;
-		return empty_result;
+		return file_paths;
 	}
 
-	// 收集所有文件路径(带数量上限和扩展名过滤)
-	std::vector<fs::path> file_paths;
-	file_paths.reserve(max_dataset_size);
-
+	file_paths.reserve(max_count);
 	try {
 		for (auto &entry : fs::recursive_directory_iterator(folder_path, fs::directory_options::skip_permission_denied)) {
-			if (file_paths.size() >= max_dataset_size) {
+			if (file_paths.size() >= max_count) {
 				break;
 			}
 
@@ -111,10 +106,18 @@ std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t 
 	} catch (const fs::filesystem_error &e) {
 		std::cerr << "[Warning] 目录遍历错误: " << e.what() << std::endl;
 	}
+	return file_paths;
+}
 
+// 并行地对文件列表逐个执行produce(签名为bool(const fs::path &, T &), 返回false表示跳过该文件),
+// 压缩出成功产出的结果集. 结果按输入下标写入以保证顺序确定, 逐文件try/catch隔离异常;
+// 若paths_out非空则同步输出与结果一一对应的源文件路径.
+template<typename T, typename Producer>
+std::vector<T> parallel_produce(const std::vector<fs::path> &file_paths, size_t thread_count, const char *task_name, Producer produce, std::vector<fs::path> *paths_out) {
 	const size_t total = file_paths.size();
+	std::vector<T> results_compact;
 	if (total == 0) {
-		return empty_result;
+		return results_compact;
 	}
 
 	// 线程数计算
@@ -123,8 +126,8 @@ std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t 
 	unsigned int real_threads = thread_count ? static_cast<unsigned int>(thread_count) : hw;
 	real_threads = std::min(real_threads, static_cast<unsigned int>(total));
 
-	// 并行生成 EFG, 按索引写入
-	std::vector<std::optional<starlight_v3::EFG>> results(total);
+	// 并行产出, 按索引写入
+	std::vector<std::optional<T>> results(total);
 	std::atomic<size_t> current_idx { 0 };
 	std::atomic<size_t> loaded_count { 0 };
 	std::mutex cout_mutex;
@@ -137,9 +140,9 @@ std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t 
 			}
 
 			try {
-				auto [success, efg] = starlight_v3::generate_efg(file_paths[idx].string());
-				if (success) {
-					results[idx].emplace(std::move(efg));
+				T value;
+				if (produce(file_paths[idx], value)) {
+					results[idx].emplace(std::move(value));
 					size_t count = loaded_count.fetch_add(1) + 1;
 					if (count % 10 == 0 || count == total) {
 						std::lock_guard lock(cout_mutex);
@@ -150,10 +153,10 @@ std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t 
 				}
 			} catch (const std::exception &e) {
 				std::lock_guard lock(cout_mutex);
-				std::cerr << "\n[Warning] 生成EFG异常 " << file_paths[idx] << ": " << e.what() << std::endl;
+				std::cerr << "\n[Warning] " << task_name << "异常 " << file_paths[idx] << ": " << e.what() << std::endl;
 			} catch (...) {
 				std::lock_guard lock(cout_mutex);
-				std::cerr << "\n[Warning] 生成EFG未知异常 " << file_paths[idx] << std::endl;
+				std::cerr << "\n[Warning] " << task_name << "未知异常 " << file_paths[idx] << std::endl;
 			}
 		}
 	};
@@ -168,35 +171,52 @@ std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t 
 	}
 
 	// 压缩结果
-	std::vector<starlight_v3::EFG> dataset;
-	dataset.reserve(loaded_count);
+	results_compact.reserve(loaded_count);
 	if (paths_out != nullptr) {
 		paths_out->clear();
 		paths_out->reserve(loaded_count);
 	}
 	for (size_t i = 0; i < results.size(); ++i) {
 		if (results[i].has_value()) {
-			dataset.push_back(std::move(*results[i]));
+			results_compact.push_back(std::move(*results[i]));
 			if (paths_out != nullptr) {
 				paths_out->push_back(file_paths[i]);
 			}
 		}
 	}
+	return results_compact;
+}
+
+// 从指定文件夹加载EFG数据集, 可选输出每个EFG对应的源文件路径(供跑分模式使用)
+std::vector<starlight_v3::EFG> load_dataset(const fs::path &folder_path, size_t max_dataset_size, size_t thread_count = 0, const std::unordered_set<std::string> &allowed_extensions = {}, std::vector<fs::path> *paths_out = nullptr) {
+	const std::vector<fs::path> file_paths = collect_file_paths(folder_path, max_dataset_size, allowed_extensions);
+	std::vector<starlight_v3::EFG> dataset = parallel_produce<starlight_v3::EFG>(
+		file_paths, thread_count, "生成EFG",
+		[](const fs::path &path, starlight_v3::EFG &out) {
+			auto [success, efg] = starlight_v3::generate_efg(path.string());
+			if (!success) {
+				return false;
+			}
+			out = std::move(efg);
+			return true;
+		},
+		paths_out);
 
 	std::cout << "\n[Info] 有效EFG数量: " << dataset.size() << std::endl;
 	return dataset;
 }
 
-// 将EFG数据集与文件路径一一绑定为TrainSample列表(调用方必须保证两者长度一致)
-std::vector<starlight_v3::TrainSample> make_samples(const std::vector<starlight_v3::EFG> &dataset, const std::vector<fs::path> &paths) {
-	std::vector<starlight_v3::TrainSample> samples;
-	samples.reserve(dataset.size());
-	for (size_t i = 0; i < dataset.size(); ++i) {
-		starlight_v3::TrainSample sample;
-		sample.efg = dataset[i];
-		sample.file_path = paths[i].string();
-		samples.push_back(std::move(sample));
-	}
+// 从指定文件夹加载训练样本集(EFG + 文件路径 + 预取特征, 见prepare_train_sample)
+std::vector<starlight_v3::TrainSample> load_train_samples(const fs::path &folder_path, size_t max_dataset_size, bool fast_read, size_t thread_count = 0) {
+	const std::vector<fs::path> file_paths = collect_file_paths(folder_path, max_dataset_size, {});
+	std::vector<starlight_v3::TrainSample> samples = parallel_produce<starlight_v3::TrainSample>(
+		file_paths, thread_count, "准备训练样本",
+		[fast_read](const fs::path &path, starlight_v3::TrainSample &out) {
+			return starlight_v3::prepare_train_sample(path.string(), fast_read, out);
+		},
+		nullptr);
+
+	std::cout << "\n[Info] 有效样本数量: " << samples.size() << std::endl;
 	return samples;
 }
 
@@ -336,6 +356,11 @@ bool load_train_config(const std::string &config_path, starlight_v3::TrainConfig
 				config.random_seed = static_cast<unsigned int>(std::stoul(value_str));
 			} else if (key == "thread_count") {
 				config.thread_count = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+			} else if (key == "fast_read") {
+				// 布尔值: 支持 1/0/true/false/on/off/yes/no
+				std::string v = value_str;
+				std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+				config.fast_read = (v == "1" || v == "true" || v == "on" || v == "yes");
 			} else {
 				std::cerr << "[Error] " << config_path << ":" << line_num << " 未知字段: " << key << std::endl;
 				return false;
@@ -353,30 +378,26 @@ bool load_train_config(const std::string &config_path, starlight_v3::TrainConfig
 // 交叉训练生成特征 -> LightGBM训练 -> 最终tosSPM全量训练 -> 保存模型 -> 重新加载验证.
 // 返回0成功, 非0失败.
 int run_train(const std::string &malware_folder, const std::string &benign_folder, const std::string &model_path, size_t max_train_samples, const std::string &version_str, const std::string &config_path) {
-	// 加载训练数据集(同时收集源文件路径, 用于PE特征提取)
-	std::cout << "[Info] 正在加载恶意样本数据集..." << std::endl;
-	std::vector<fs::path> malware_paths, benign_paths;
-	std::vector<starlight_v3::EFG> malware_dataset = load_dataset(malware_folder, max_train_samples, 0, {}, &malware_paths);
-
-	std::cout << "\n[Info] 正在加载良性样本数据集..." << std::endl;
-	std::vector<starlight_v3::EFG> benign_dataset = load_dataset(benign_folder, max_train_samples, 0, {}, &benign_paths);
-
-	// 检查数据集是否为空
-	if (malware_dataset.empty() || benign_dataset.empty()) {
-		std::cerr << "\n[Error] 数据集为空, 请检查文件夹路径后重试。" << std::endl;
-		return -1;
-	}
-
-	// 绑定样本(EFG + 文件路径)
-	std::vector<starlight_v3::TrainSample> malware_samples = make_samples(malware_dataset, malware_paths);
-	std::vector<starlight_v3::TrainSample> benign_samples = make_samples(benign_dataset, benign_paths);
-
 	// 配置训练参数(从配置文件加载, 见train.conf)
+	// 先读配置: fast_read决定样本加载阶段是否顺带预取静态特征
 	starlight_v3::TrainConfig config;
 	if (!config_path.empty()) {
 		if (!load_train_config(config_path, config)) {
 			return -1;
 		}
+	}
+
+	// 加载训练样本集(EFG + 文件路径 + 预取特征)
+	std::cout << "[Info] 正在加载恶意样本数据集..." << std::endl;
+	std::vector<starlight_v3::TrainSample> malware_samples = load_train_samples(malware_folder, max_train_samples, config.fast_read);
+
+	std::cout << "\n[Info] 正在加载良性样本数据集..." << std::endl;
+	std::vector<starlight_v3::TrainSample> benign_samples = load_train_samples(benign_folder, max_train_samples, config.fast_read);
+
+	// 检查数据集是否为空
+	if (malware_samples.empty() || benign_samples.empty()) {
+		std::cerr << "\n[Error] 数据集为空, 请检查文件夹路径后重试。" << std::endl;
+		return -1;
 	}
 
 	// 日志回调函数
