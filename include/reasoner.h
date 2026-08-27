@@ -15,6 +15,7 @@
 #include "basic/feat_pack.h"
 #include "lgbm/reasoner.h"
 #include "model.h"
+#include "pe/view.h"
 #include "tspm/reasoner.h"
 
 namespace starlight_v3 {
@@ -25,7 +26,7 @@ namespace starlight_v3 {
 struct AnalysisResult {
 	double final_score; ///< 最终恶意概率, 值域[0, 1], 越接近1越可能为恶意(LightGBM二分类输出)
 	tspm::AnalysisResult tspm_result; ///< tosSPM引擎的推理结果(含证据树, 可交给extract_evidence_dot导出)
-	FeatPack feats; ///< 本次分析提取的全部171维特征(可解释性/调试用)
+	FeatPack feats; ///< 本次分析提取的全部284维特征(可解释性/调试用)
 };
 
 /**
@@ -62,16 +63,27 @@ public:
 	AnalysisResult analyze_efg(const EFG &efg);
 
 	/**
-	 * @brief 对已知EFG进行分析(提取完整171维特征)
+	 * @brief 对已知EFG进行分析(提取完整284维特征)
 	 * @param efg 目标程序的EFG
-	 * @param file_path 目标程序PE文件的路径, 用于提取PE静态特征
+	 * @param file_path 目标程序PE文件的路径, 用于提取文件字节派生的静态特征
+	 * @note 内部载入文件视图后转调视图版本; 已持有PeView的调用方应直接使用视图版本以免重复读盘
 	 * @return 分析结果
 	 */
 	AnalysisResult analyze_efg(const EFG &efg, const std::string &file_path);
 
 	/**
+	 * @brief 对已知EFG与文件视图进行分析(提取完整284维特征)
+	 * @param efg 目标程序的EFG
+	 * @param view 目标程序的PE文件视图(见pe/view.h), 其生命周期必须覆盖本次调用
+	 * @note EFG与静态特征共用同一份文件字节, 全程零额外磁盘I/O
+	 * @return 分析结果
+	 */
+	AnalysisResult analyze_efg(const EFG &efg, const pe::PeView &view);
+
+	/**
 	 * @brief 对指定PE文件进行分析(内部自动生成EFG)
 	 * @param file_path 目标程序PE文件的路径
+	 * @note 全程只读盘一次, 同一份文件字节贯穿EFG生成与全部静态特征提取
 	 * @return 分析结果
 	 */
 	AnalysisResult analyze_file(const std::string &file_path);

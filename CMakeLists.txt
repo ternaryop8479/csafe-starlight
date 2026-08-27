@@ -216,6 +216,7 @@ add_library(starlight_v3_lib STATIC
 	src/lgbm/trainer.cpp
 	src/lgbm/feat_extractor/efg.cpp
 	src/lgbm/feat_extractor/pe.cpp
+	src/lgbm/feat_extractor/static_feats.cpp
 	src/pe/view.cpp
 	src/pe/hist.cpp
 	src/lgbm/feat_extractor/tspm.cpp

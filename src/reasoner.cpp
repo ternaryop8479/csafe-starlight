@@ -15,15 +15,9 @@
 #include "authenticode/reasoner.h"
 #include "efg_generator.h"
 #include "lgbm/feat_extractor/efg.h"
-#include "lgbm/feat_extractor/pe.h"
+#include "lgbm/feat_extractor/static_feats.h"
 #include "lgbm/feat_extractor/tspm.h"
 #include "lgbm/feat_vector.h"
-#include "pe/authenticode.h"
-#include "pe/rich_header.h"
-#include "pe/dotnet.h"
-#include "pe/iat.h"
-#include "pe/imports.h"
-#include "pe/capability.h"
 #include "pe/view.h"
 #include "reasoner.h"
 
@@ -157,32 +151,24 @@ AnalysisResult Reasoner::analyze_efg(const EFG &efg) {
 	return result;
 }
 
-// 对已知EFG进行分析(提取完整434维特征)
-AnalysisResult Reasoner::analyze_efg(const EFG &efg, const std::string &file_path) {
-	AnalysisResult result = {}; // 值初始化, 四个特征组全部清零
+// 对已知EFG与文件视图进行分析(提取完整284维特征)
+AnalysisResult Reasoner::analyze_efg(const EFG &efg, const pe::PeView &view) {
+	AnalysisResult result = {}; // 值初始化, 全部特征组先行清零
 
 	// tosSPM推理(记录证据树, 供特征提取与DOT导出使用)
 	result.tspm_result = tspm_reasoner_.analyze_efg(efg, true);
 
-	// 提取特征: EFG特征 + TSPM特征 + PE特征 + 分块熵特征 + 签名置信度特征
+	// EFG派生特征
 	result.feats.efg_feats = lgbm::extract_efg_feats(efg);
 	result.feats.tspm_feats = lgbm::extract_tspm_feats(result.tspm_result, efg);
-	result.feats.pe_feats = lgbm::extract_pe_feats(file_path, &result.feats.block_entropy_feats);
 
-	// 签名置信度: 查询模型内嵌白签名表(独立于PE特征的文件视图, 仅读取头部与安全目录)
-	starlight_v3::pe::PeView pv;
-	starlight_v3::pe::CertIdentity identity;
-	if (starlight_v3::pe::PeView::load(file_path, pv)) {
-		identity = starlight_v3::pe::inspect_signature(pv);
-	}
+	// 文件字节派生的静态特征组(PE/分块熵/Rich Header/.NET/IAT/能力)一次性提取
+	const starlight_v3::pe::CertIdentity identity = lgbm::extract_static_feats(view, result.feats);
+
+	// 签名置信度: 将签名者身份查模型内嵌白签名表折叠为置信度
 	const authenticode::Reasoner sig_reasoner(model_.sig_table());
 	result.feats.sig_feats.sig_confidence = sig_reasoner.confidence(identity);
 	result.feats.sig_feats.signed_present = identity.present ? 1.0 : 0.0;
-	result.feats.rich_header_feats = starlight_v3::pe::extract_rich_header_feats(pv);
-	result.feats.dotnet_feats = starlight_v3::pe::extract_dotnet_feats(pv);
-	const std::vector<starlight_v3::pe::ImportEntry> imports = starlight_v3::pe::enumerate_imports(pv);
-	result.feats.iat_feats = starlight_v3::pe::extract_iat_feats(pv, imports);
-	result.feats.capability_feats = starlight_v3::pe::extract_capability_feats(imports);
 
 	// LightGBM打分
 	double features[lgbm::kTotalFeatDims];
@@ -191,13 +177,28 @@ AnalysisResult Reasoner::analyze_efg(const EFG &efg, const std::string &file_pat
 	return result;
 }
 
+// 对已知EFG进行分析(提取完整284维特征)
+AnalysisResult Reasoner::analyze_efg(const EFG &efg, const std::string &file_path) {
+	// 载入文件视图后转调视图版本; 非PE(视图加载失败)时静态特征保持全零, 仅按EFG打分
+	starlight_v3::pe::PeView view;
+	if (!starlight_v3::pe::PeView::load(file_path, view)) {
+		return analyze_efg(efg);
+	}
+	return analyze_efg(efg, view);
+}
+
 // 对指定PE文件进行分析(内部自动生成EFG)
 AnalysisResult Reasoner::analyze_file(const std::string &file_path) {
-	auto [success, efg] = generate_efg(file_path);
+	// 单次读盘: 同一份文件字节贯穿EFG生成与全部静态特征提取
+	starlight_v3::pe::PeView view;
+	if (!starlight_v3::pe::PeView::load(file_path, view)) {
+		throw std::runtime_error("Reasoner::analyze_file(): EFG generation failed, file is not a valid PE: " + file_path);
+	}
+	auto [success, efg] = generate_efg(view);
 	if (!success) {
 		throw std::runtime_error("Reasoner::analyze_file(): EFG generation failed, file is not a valid PE: " + file_path);
 	}
-	return analyze_efg(efg, file_path);
+	return analyze_efg(efg, view);
 }
 
 } // namespace starlight_v3
