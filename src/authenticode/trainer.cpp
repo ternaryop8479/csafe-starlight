@@ -32,8 +32,10 @@ void Trainer::ingest(const pe::CertIdentity &identity, bool is_malware) {
 Model Trainer::build() {
 	Model model;
 	SIZE_T white_count = 0;
+	SIZE_T signer_count = 0;
 	{
 		std::lock_guard<std::mutex> lock(stats_mutex_);
+		signer_count = stats_.size(); // 必须在锁内取: 锁外读取与并行ingest的插入构成数据竞争
 		for (const auto &[hash, stat] : stats_) {
 			const SIZE_T total = stat.mal_count + stat.ben_count;
 			const double ben_ratio = total != 0 ? static_cast<double>(stat.ben_count) / static_cast<double>(total) : 0.0;
@@ -45,8 +47,12 @@ Model Trainer::build() {
 			}
 		}
 	}
-	log_by_callback("[Authenticode::Trainer::build()] 签名者总数=" + std::to_string(stats_.size())
+	log_by_callback("[Authenticode::Trainer::build()] 签名者总数=" + std::to_string(signer_count)
 		+ ", 入表白签名=" + std::to_string(white_count) + "\n");
+	// 一个签名者都没聚合到通常是证书解析链路失效, 此时sig_confidence会是恒0的死特征
+	if (signer_count == 0) {
+		log_by_callback("[Authenticode::Trainer::build()] WARN: 未聚合到任何签名者身份, sig_confidence将恒为0\n");
+	}
 	return model;
 }
 

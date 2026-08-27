@@ -24,8 +24,10 @@ namespace starlight_v3::authenticode {
  * @brief 白签名表训练配置
  */
 struct TrainerConfig {
-	double white_ben_ratio; ///< 判定为白签名的最低良性占比: ben/(ben+mal) >= 该值
-	SIZE_T min_ben_count; ///< 判定为白签名的最低良性样本数(防止小样本偶然命中)
+	// 两字段均带默认值: 训练配置文件为可选(见starlight_v3.cpp的load_train_config),
+	// 未指定authenticode_config.*时若无默认值则读取未初始化内存, 白表阈值将不可复现
+	double white_ben_ratio = 0.75; ///< 判定为白签名的最低良性占比: ben/(ben+mal) >= 该值
+	SIZE_T min_ben_count = 5; ///< 判定为白签名的最低良性样本数(防止小样本偶然命中)
 };
 
 /**
