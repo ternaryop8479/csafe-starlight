@@ -751,11 +751,16 @@ private:
 namespace starlight_v3::lgbm {
 
 // PE特征提取主函数
-PEFeatPack extract_pe_feats(const std::string &file_path, BlockEntropyFeatPack *block_entropy_out) {
+PEFeatPack extract_pe_feats(const pe::PeView &view, BlockEntropyFeatPack *block_entropy_out) {
 	PEFeatPack feats = {}; // 值初始化, 提取失败的部分保持全零
+	// 提前清零输出参数: 任何提前返回路径都不再触碰该指针, 避免调用方读到未初始化值
+	if (block_entropy_out != nullptr) {
+		*block_entropy_out = BlockEntropyFeatPack {};
+	}
 
 	// 兼容解析: 首次解析失败时自动修补pe-parse已知缺陷(无数据段目录/空debug条目)后重试
-	ParsedPECompat pe_compat = parse_pe_with_compat(file_path);
+	// 直接复用视图内的文件字节, 不再重复读盘
+	ParsedPECompat pe_compat = parse_pe_with_compat(view.data(), view.size());
 	if (pe_compat.pe == nullptr) {
 		return feats; // 非PE格式或损坏到无意义, 返回全零
 	}
@@ -1110,6 +1115,18 @@ PEFeatPack extract_pe_feats(const std::string &file_path, BlockEntropyFeatPack *
 	}
 
 	return feats;
+}
+
+PEFeatPack extract_pe_feats(const std::string &file_path, BlockEntropyFeatPack *block_entropy_out) {
+	// 读入文件视图后转调视图版本, 非PE(视图加载失败)返回全零特征
+	pe::PeView view;
+	if (!pe::PeView::load(file_path, view)) {
+		if (block_entropy_out != nullptr) {
+			*block_entropy_out = BlockEntropyFeatPack {};
+		}
+		return PEFeatPack {};
+	}
+	return extract_pe_feats(view, block_entropy_out);
 }
 
 } // namespace starlight_v3::lgbm

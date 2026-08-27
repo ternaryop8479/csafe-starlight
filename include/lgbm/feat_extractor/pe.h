@@ -12,13 +12,24 @@
 #include <string>
 
 #include "basic/feat_pack.h"
+#include "pe/view.h"
 
 namespace starlight_v3::lgbm {
 
 /**
+ * @brief 从已读入内存的PE文件视图中提取静态特征(91维)
+ * @param view 目标PE文件视图(见pe/view.h)，其生命周期必须覆盖本次调用
+ * @param block_entropy_out 可选输出参数: 非空时填充分块熵特征(复用同一次PE解析的文件字节, 零额外磁盘I/O; 提取失败时填全零)
+ * @note 供已持有PeView的调用方复用同一份文件字节，避免重复读盘
+ * @return 提取出的91维特征
+ */
+PEFeatPack extract_pe_feats(const pe::PeView &view, BlockEntropyFeatPack *block_entropy_out = nullptr);
+
+/**
  * @brief 从PE文件中提取静态特征(91维)
  * @param file_path 目标PE文件路径
- * @param block_entropy_out 可选输出参数: 非空时同步填充分块熵特征(复用同一次PE解析的文件字节, 零额外磁盘I/O)
+ * @param block_entropy_out 可选输出参数: 非空时填充分块熵特征(复用同一次PE解析的文件字节, 零额外磁盘I/O; 提取失败时填全零)
+ * @note 内部读入文件后转调视图版本，仅需PE特征的调用方可直接使用本重载
  * @return 提取出的91维特征
  */
 PEFeatPack extract_pe_feats(const std::string &file_path, BlockEntropyFeatPack *block_entropy_out = nullptr);
