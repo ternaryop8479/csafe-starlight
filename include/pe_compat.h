@@ -9,6 +9,7 @@
 #ifndef CSAFE_STARLIGHT_V3_INCLUDE_BASIC_PE_COMPAT_H
 #define CSAFE_STARLIGHT_V3_INCLUDE_BASIC_PE_COMPAT_H
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -40,6 +41,16 @@ struct ParsedPECompat {
  * @return 兼容解析结果，调用方负责DestructParsedPE(pe)释放
  */
 ParsedPECompat parse_pe_with_compat(const std::string &file_path);
+
+/**
+ * @brief 解析已读入内存的PE字节，首次失败时自动执行兼容修补后重试
+ * @note 修补项与路径版一致。正常路径直接以入参字节解析(零拷贝)，仅命中已知缺陷需原地改写时才拷入patched_data。
+ * @param data 文件完整字节的只读指针，不得为nullptr
+ * @param len 字节长度
+ * @warning 正常路径下解析产物内部直接引用data指向的字节，data的生命周期必须覆盖解析产物的整个使用期
+ * @return 兼容解析结果，调用方负责DestructParsedPE(pe)释放
+ */
+ParsedPECompat parse_pe_with_compat(const std::uint8_t *data, std::size_t len);
 
 } // namespace starlight_v3
 

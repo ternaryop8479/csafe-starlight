@@ -23,6 +23,7 @@
 
 #include "basic/efg.h"
 #include "efg_generator.h"
+#include "pe/view.h"
 #include "pe_compat.h"
 
 #ifndef ZYDIS_MAX_OPERAND_COUNT
@@ -56,7 +57,7 @@ struct CodeSection {
 // PE文件解析器，解析PE文件并提取导入表与可执行段数据
 class PEParser {
 public:
-	explicit PEParser(const std::string &file_path); ///< 构造函数: 记录文件路径
+	explicit PEParser(const pe::PeView &view); ///< 构造函数: 记录待解析的文件视图
 	~PEParser(); ///< 析构函数: 释放pe-parse解析产物
 	PEParser(const PEParser &) = delete; ///< 禁止拷贝
 	PEParser &operator=(const PEParser &) = delete; ///< 禁止赋值
@@ -75,8 +76,7 @@ private:
 
 // PEParser内部实现，封装pe-parse相关数据和回调
 struct PEParser::Impl {
-	std::string file_path_; ///< 待解析的PE文件路径
-	std::string file_name_; ///< 文件路径中的纯文件名(用于日志/调试)
+	const pe::PeView *view_ = nullptr; ///< 待解析的文件视图(不持有, 生命周期由调用方保证)
 	peparse::parsed_pe *pe_ = nullptr; ///< pe-parse解析产物(析构时释放)
 	ParsedPECompat pe_compat_; ///< 兼容解析结果(仅修补路径持有文件字节，存活至本对象析构)
 	std::vector<ImportInfo> imports_; ///< 解析出的导入函数列表
@@ -127,13 +127,9 @@ int PEParser::Impl::section_callback(void *ctx, const peparse::VA &,
 	return 0;
 }
 
-PEParser::PEParser(const std::string &file_path)
+PEParser::PEParser(const pe::PeView &view)
 	: impl_(std::make_unique<Impl>()) {
-	impl_->file_path_ = file_path;
-	size_t pos = file_path.find_last_of("/\\");
-	impl_->file_name_ = (pos != std::string::npos)
-		? file_path.substr(pos + 1)
-		: file_path;
+	impl_->view_ = &view;
 }
 
 PEParser::~PEParser() {
@@ -144,7 +140,8 @@ PEParser::~PEParser() {
 
 bool PEParser::parse() {
 	// 解析PE文件，失败(非PE或严重损坏)或命中pe-parse已知缺陷时走兼容修补路径
-	impl_->pe_compat_ = parse_pe_with_compat(impl_->file_path_);
+	// 直接复用视图内的文件字节, 不再重复读盘
+	impl_->pe_compat_ = parse_pe_with_compat(impl_->view_->data(), impl_->view_->size());
 	impl_->pe_ = impl_->pe_compat_.pe;
 	if (!impl_->pe_) {
 		return false;
@@ -785,9 +782,9 @@ EFG EFGBuilder::build() {
 	return impl_->to_efg();
 }
 
-std::pair<bool, EFG> generate_efg(const std::string &file_path) {
+std::pair<bool, EFG> generate_efg(const pe::PeView &view) {
 	// 解析PE文件，失败(非PE/严重损坏)返回空EFG
-	PEParser parser(file_path);
+	PEParser parser(view);
 	if (!parser.parse()) {
 		return { false, EFG {} };
 	}
@@ -798,6 +795,15 @@ std::pair<bool, EFG> generate_efg(const std::string &file_path) {
 	EFG efg = builder.build();
 
 	return { true, std::move(efg) };
+}
+
+std::pair<bool, EFG> generate_efg(const std::string &file_path) {
+	// 读入文件视图后转调视图版本, 非PE(视图加载失败)直接返回空EFG
+	pe::PeView view;
+	if (!pe::PeView::load(file_path, view)) {
+		return { false, EFG {} };
+	}
+	return generate_efg(view);
 }
 
 } // namespace starlight_v3
