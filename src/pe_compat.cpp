@@ -23,7 +23,7 @@ namespace {
 // 注意: 不能使用peparse::readFileToFileBuffer，它会对文件做PROT_READ+MAP_SHARED映射，
 // 对映射区写入会触发SIGSEGV(且MAP_SHARED会回写源文件)，因此这里用ifstream读到自有缓冲区再修补
 // 从指定地址按小端读取整数(memcpy规避未对齐访问与严格别名问题, 调用方需先完成边界校验)
-template<typename T>
+template <typename T>
 T read_le(const std::uint8_t *base) {
 	T value = 0;
 	std::memcpy(&value, base, sizeof(T));
@@ -31,7 +31,7 @@ T read_le(const std::uint8_t *base) {
 }
 
 // 向指定地址按小端写入整数(同上, 调用方需先完成边界校验)
-template<typename T>
+template <typename T>
 void write_le(std::uint8_t *base, T value) {
 	std::memcpy(base, &value, sizeof(T));
 }

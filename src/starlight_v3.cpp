@@ -112,7 +112,7 @@ std::vector<fs::path> collect_file_paths(const fs::path &folder_path, size_t max
 // 并行地对文件列表逐个执行produce(签名为bool(const fs::path &, T &), 返回false表示跳过该文件),
 // 压缩出成功产出的结果集. 结果按输入下标写入以保证顺序确定, 逐文件try/catch隔离异常;
 // 若paths_out非空则同步输出与结果一一对应的源文件路径.
-template<typename T, typename Producer>
+template <typename T, typename Producer>
 std::vector<T> parallel_produce(const std::vector<fs::path> &file_paths, size_t thread_count, const char *task_name, Producer produce, std::vector<fs::path> *paths_out) {
 	const size_t total = file_paths.size();
 	std::vector<T> results_compact;

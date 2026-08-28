@@ -182,58 +182,125 @@
 	X(block_entropy, 16)
 
 // 白签名置信度特征宏列表
-#define SIG_FEAT_FIELDS(X)   \
-	X(sig_confidence)        \
+#define SIG_FEAT_FIELDS(X) \
+	X(sig_confidence)      \
 	X(signed_present)
 
 // Rich Header特征宏列表
 #define RICH_HEADER_FEAT_FIELDS(X) \
-	X(present)                 \
-	X(valid)                   \
-	X(entry_count)             \
-	X(total_count)             \
-	X(max_entry_count)         \
-	X(distinct_product_count)  \
-	X(min_build)               \
-	X(max_build)               \
-	X(build_span)              \
-	X(present_without_debug)   \
-	X(known_product_count) X(unknown_product_count) X(product_diversity) \
-	X(build_mean) X(build_std) X(build_zero_ratio) X(prodid_min) \
-	X(prodid_max) X(prodid_span) X(distinct_build_count) \
-	X(count_entropy) X(mixed_toolchain)
+	X(present)                     \
+	X(valid)                       \
+	X(entry_count)                 \
+	X(total_count)                 \
+	X(max_entry_count)             \
+	X(distinct_product_count)      \
+	X(min_build)                   \
+	X(max_build)                   \
+	X(build_span)                  \
+	X(present_without_debug)       \
+	X(known_product_count)         \
+	X(unknown_product_count)       \
+	X(product_diversity)           \
+	X(build_mean)                  \
+	X(build_std)                   \
+	X(build_zero_ratio)            \
+	X(prodid_min)                  \
+	X(prodid_max)                  \
+	X(prodid_span)                 \
+	X(distinct_build_count)        \
+	X(count_entropy)               \
+	X(mixed_toolchain)
 
 // CLR与.NET元数据特征宏列表
-#define DOTNET_FEAT_FIELDS(X) \
-	X(present) X(il_only) X(requires_32bit) X(strong_name) X(native_entrypoint) \
-	X(metadata_major) X(metadata_minor) X(stream_count) X(strings_size) \
-	X(user_strings_size) X(blob_size) X(guid_size) X(type_ref_rows) X(type_def_rows) \
-	X(method_def_rows) X(field_rows) X(member_ref_rows) X(custom_attribute_rows) \
-	X(assembly_ref_rows) X(resource_rows) X(module_rows) X(param_rows) \
-	X(interface_impl_rows) X(constant_rows) X(decl_security_rows) X(class_layout_rows) \
-	X(standalone_sig_rows) X(event_rows) X(property_rows) X(method_impl_rows) \
-	X(type_spec_rows) X(impl_map_rows) X(field_rva_rows) X(nested_class_rows) \
-	X(generic_param_rows) X(method_spec_rows) X(metadata_other_rows) \
-	X(strings_count) X(strings_length_mean) X(strings_length_max) X(strings_long_ratio) \
-	X(strings_digit_ratio) X(strings_non_ascii_ratio) X(strings_high_entropy_ratio) \
-	X(strings_short_ratio) X(user_strings_count) X(user_strings_length_mean) \
-	X(user_strings_long_ratio) X(protector_marker_count) \
-	X(method_body_count) X(method_body_missing_ratio) X(method_il_total_size) \
-	X(method_il_mean_size) X(method_il_max_size) X(method_il_min_size) \
-	X(method_tiny_body_ratio) X(method_fat_body_ratio) X(method_il_zero_ratio) \
-	X(metadata_version_length) X(strings_entropy) X(user_strings_entropy) \
+#define DOTNET_FEAT_FIELDS(X)     \
+	X(present)                    \
+	X(il_only)                    \
+	X(requires_32bit)             \
+	X(strong_name)                \
+	X(native_entrypoint)          \
+	X(metadata_major)             \
+	X(metadata_minor)             \
+	X(stream_count)               \
+	X(strings_size)               \
+	X(user_strings_size)          \
+	X(blob_size)                  \
+	X(guid_size)                  \
+	X(type_ref_rows)              \
+	X(type_def_rows)              \
+	X(method_def_rows)            \
+	X(field_rows)                 \
+	X(member_ref_rows)            \
+	X(custom_attribute_rows)      \
+	X(assembly_ref_rows)          \
+	X(resource_rows)              \
+	X(module_rows)                \
+	X(param_rows)                 \
+	X(interface_impl_rows)        \
+	X(constant_rows)              \
+	X(decl_security_rows)         \
+	X(class_layout_rows)          \
+	X(standalone_sig_rows)        \
+	X(event_rows)                 \
+	X(property_rows)              \
+	X(method_impl_rows)           \
+	X(type_spec_rows)             \
+	X(impl_map_rows)              \
+	X(field_rva_rows)             \
+	X(nested_class_rows)          \
+	X(generic_param_rows)         \
+	X(method_spec_rows)           \
+	X(metadata_other_rows)        \
+	X(strings_count)              \
+	X(strings_length_mean)        \
+	X(strings_length_max)         \
+	X(strings_long_ratio)         \
+	X(strings_digit_ratio)        \
+	X(strings_non_ascii_ratio)    \
+	X(strings_high_entropy_ratio) \
+	X(strings_short_ratio)        \
+	X(user_strings_count)         \
+	X(user_strings_length_mean)   \
+	X(user_strings_long_ratio)    \
+	X(protector_marker_count)     \
+	X(method_body_count)          \
+	X(method_body_missing_ratio)  \
+	X(method_il_total_size)       \
+	X(method_il_mean_size)        \
+	X(method_il_max_size)         \
+	X(method_il_min_size)         \
+	X(method_tiny_body_ratio)     \
+	X(method_fat_body_ratio)      \
+	X(method_il_zero_ratio)       \
+	X(metadata_version_length)    \
+	X(strings_entropy)            \
+	X(user_strings_entropy)       \
 	X(managed_resource_size)
 
 // IAT/导入目录结构特征宏列表
-#define IAT_FEAT_FIELDS(X) \
-	X(ordinal_ratio) X(import_directory_size) X(delay_import_present) X(delay_import_size) \
-	X(bound_import_present) X(first_dll_is_system) X(import_dll_entropy) X(import_count)
+#define IAT_FEAT_FIELDS(X)   \
+	X(ordinal_ratio)         \
+	X(import_directory_size) \
+	X(delay_import_present)  \
+	X(delay_import_size)     \
+	X(bound_import_present)  \
+	X(first_dll_is_system)   \
+	X(import_dll_entropy)    \
+	X(import_count)
 
 // 导入API能力类别特征宏列表
 #define CAPABILITY_FEAT_FIELDS(X) \
-	X(injection_count) X(anti_debug_count) X(network_count) X(download_count) \
-	X(process_count) X(service_count) X(registry_count) X(file_count) \
-	X(crypto_count) X(shell_count) X(memory_count) X(ipc_count)
+	X(injection_count)            \
+	X(anti_debug_count)           \
+	X(network_count)              \
+	X(download_count)             \
+	X(process_count)              \
+	X(service_count)              \
+	X(registry_count)             \
+	X(file_count)                 \
+	X(crypto_count)               \
+	X(shell_count)                \
+	X(memory_count)               \
+	X(ipc_count)
 
 // 用于编译期统计维度数的宏
 #define FEAT_COUNT_ONE(name) +1
@@ -264,10 +331,11 @@ static_assert(starlight_v3::BlockEntropyFeatPack::kFieldCount == starlight_v3::l
 
 // 各分段维度之和必须等于总维度: 新增特征段时若漏改kTotalFeatDims, 序列化会静默少写/越界
 static_assert(starlight_v3::lgbm::kEfgFeatDims + starlight_v3::lgbm::kTspmFeatDims
-		+ starlight_v3::lgbm::kPeFeatDims + starlight_v3::lgbm::kBlockEntropyFeatDims
-		+ starlight_v3::lgbm::kSigFeatDims + starlight_v3::lgbm::kRichHeaderFeatDims
-		+ starlight_v3::lgbm::kDotnetFeatDims + starlight_v3::lgbm::kIatFeatDims
-		+ starlight_v3::lgbm::kCapabilityFeatDims == starlight_v3::lgbm::kTotalFeatDims,
+			+ starlight_v3::lgbm::kPeFeatDims + starlight_v3::lgbm::kBlockEntropyFeatDims
+			+ starlight_v3::lgbm::kSigFeatDims + starlight_v3::lgbm::kRichHeaderFeatDims
+			+ starlight_v3::lgbm::kDotnetFeatDims + starlight_v3::lgbm::kIatFeatDims
+			+ starlight_v3::lgbm::kCapabilityFeatDims
+		== starlight_v3::lgbm::kTotalFeatDims,
 	"sum of per-section feature dims does not match kTotalFeatDims");
 
 namespace starlight_v3::lgbm {

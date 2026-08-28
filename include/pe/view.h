@@ -55,22 +55,69 @@ public:
 	 */
 	static bool load(const std::string &path, PeView &out);
 
-	const uint8_t *data() const; ///< 文件完整字节(只读)
-	size_t size() const; ///< 文件字节长度
-	bool is64() const; ///< 是否为PE32+(OptionalHeaderMagic==0x20b)
-	uint32_t entry_rva() const; ///< 入口点RVA(AddressOfEntryPoint)
-	uint16_t section_count() const; ///< 节段数量(NumberOfSections)
-	const std::vector<Section> &sections() const; ///< 节段视图列表
-	bool rva_to_offset(uint32_t rva, size_t &offset) const; ///< 将RVA换算为文件偏移(未命中节段或偏移无可读字节时返回false)
-	Dir data_dir(int index) const; ///< 数据目录项(index∈[0,16), 越界返回{0,0})
-	size_t overlay_offset() const; ///< overlay起始偏移(所有节段原始数据之后, 签名blob即位于此处)
+	/**
+	 * @brief 获取文件完整字节的只读指针
+	 * @return 指向文件字节缓冲区起始的指针
+	 */
+	const uint8_t *data() const;
+
+	/**
+	 * @brief 获取文件字节长度
+	 * @return 文件字节总数
+	 */
+	size_t size() const;
+
+	/**
+	 * @brief 判断是否为PE32+格式
+	 * @return true为PE32+(OptionalHeaderMagic==0x20b)，false为PE32
+	 */
+	bool is64() const;
+
+	/**
+	 * @brief 获取入口点RVA
+	 * @return AddressOfEntryPoint
+	 */
+	uint32_t entry_rva() const;
+
+	/**
+	 * @brief 获取节段数量
+	 * @return NumberOfSections
+	 */
+	uint16_t section_count() const;
+
+	/**
+	 * @brief 获取节段视图列表
+	 * @return 节段视图的常量引用
+	 */
+	const std::vector<Section> &sections() const;
+
+	/**
+	 * @brief 将RVA换算为文件偏移
+	 * @param rva 相对虚拟地址
+	 * @param offset 输出参数，换算得到的文件偏移
+	 * @return 是否成功换算(未命中节段或偏移无可读字节时返回false)
+	 */
+	bool rva_to_offset(uint32_t rva, size_t &offset) const;
+
+	/**
+	 * @brief 获取数据目录项
+	 * @param index 目录索引，取值范围[0,16)
+	 * @return 数据目录项，越界返回{0,0}
+	 */
+	Dir data_dir(int index) const;
+
+	/**
+	 * @brief 获取overlay起始偏移
+	 * @return overlay起始偏移(所有节段原始数据之后，签名blob即位于此处)
+	 */
+	size_t overlay_offset() const;
 
 private:
 	std::vector<uint8_t> bytes_; ///< 文件完整字节缓冲区
 	bool is64_ = false; ///< 是否为PE32+
 	uint32_t entry_rva_ = 0; ///< 入口点RVA
 	std::vector<Section> sections_; ///< 解析出的节段视图列表
-	std::array<Dir, 16> dirs_ = {}; ///< 数据目录(最多16项, 未提供的项保持{0,0})
+	std::array<Dir, 16> dirs_ = {}; ///< 数据目录(最多16项，未提供的项保持{0,0})
 	size_t overlay_offset_ = 0; ///< overlay起始偏移
 };
 

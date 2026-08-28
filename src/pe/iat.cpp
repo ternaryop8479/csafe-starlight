@@ -18,25 +18,29 @@ namespace starlight_v3::pe {
 
 namespace {
 
-double name_entropy(const std::string &value) {
-	if (value.empty()) return 0.0;
-	std::array<size_t, 256> counts = {};
-	for (unsigned char c : value) ++counts[c];
-	double result = 0.0;
-	for (size_t count : counts) {
-		if (count == 0) continue;
-		const double p = static_cast<double>(count) / value.size();
-		result -= p * std::log2(p);
+	double name_entropy(const std::string &value) {
+		if (value.empty())
+			return 0.0;
+		std::array<size_t, 256> counts = {};
+		for (unsigned char c : value)
+			++counts[c];
+		double result = 0.0;
+		for (size_t count : counts) {
+			if (count == 0)
+				continue;
+			const double p = static_cast<double>(count) / value.size();
+			result -= p * std::log2(p);
+		}
+		return result;
 	}
-	return result;
-}
 
-bool system_dll(const std::string &name) {
-	std::string lower = name;
-	for (char &c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-	return lower == "kernel32.dll" || lower == "kernelbase.dll" || lower == "ntdll.dll"
-		|| lower == "user32.dll" || lower == "advapi32.dll" || lower == "msvcrt.dll";
-}
+	bool system_dll(const std::string &name) {
+		std::string lower = name;
+		for (char &c : lower)
+			c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+		return lower == "kernel32.dll" || lower == "kernelbase.dll" || lower == "ntdll.dll"
+			|| lower == "user32.dll" || lower == "advapi32.dll" || lower == "msvcrt.dll";
+	}
 
 } // namespace
 

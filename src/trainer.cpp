@@ -17,13 +17,13 @@
 
 #include "external/BS_thread_pool.hpp"
 
-#include "lgbm/feat_extractor/efg.h"
-#include "lgbm/feat_extractor/static_feats.h"
 #include "authenticode/reasoner.h"
 #include "authenticode/trainer.h"
+#include "efg_generator.h"
+#include "lgbm/feat_extractor/efg.h"
+#include "lgbm/feat_extractor/static_feats.h"
 #include "lgbm/feat_extractor/tspm.h"
 #include "lgbm/feat_vector.h"
-#include "efg_generator.h"
 #include "pe/authenticode.h"
 #include "pe/view.h"
 #include "trainer.h"
@@ -196,8 +196,8 @@ Model Trainer::train(const TrainConfig &config, const std::vector<TrainSample> &
 		unsigned int hw = std::thread::hardware_concurrency();
 		hw = hw ? hw : 4;
 		hw = hw < static_cast<unsigned int>(malware_samples.size() + benign_samples.size())
-			     ? hw
-			     : static_cast<unsigned int>(malware_samples.size() + benign_samples.size());
+			? hw
+			: static_cast<unsigned int>(malware_samples.size() + benign_samples.size());
 		std::vector<std::thread> scan_threads;
 		scan_threads.reserve(hw);
 		for (unsigned int t = 0; t < hw; ++t) {

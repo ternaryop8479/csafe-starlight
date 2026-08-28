@@ -6,8 +6,8 @@
  * @note 该文件主体为AI编写，人工负责精细审查并重排、规范源码。
  */
 
-#include "lgbm/feat_vector.h"
 #include "lgbm/reasoner.h"
+#include "lgbm/feat_vector.h"
 
 namespace starlight_v3::lgbm {
 

@@ -16,17 +16,17 @@ namespace starlight_v3::pe {
 
 namespace {
 
-// 从缓冲区指定偏移安全读取小端整数, 越界返回0(调用方需先行完成边界校验)
-template<typename T>
-T read_le(const uint8_t *base, size_t offset, size_t total) {
-	// 用减法比较而非offset+sizeof(T), 避免offset接近上界时加法回绕使检查失效
-	if (offset > total || sizeof(T) > total - offset) {
-		return 0;
+	// 从缓冲区指定偏移安全读取小端整数, 越界返回0(调用方需先行完成边界校验)
+	template <typename T>
+	T read_le(const uint8_t *base, size_t offset, size_t total) {
+		// 用减法比较而非offset+sizeof(T), 避免offset接近上界时加法回绕使检查失效
+		if (offset > total || sizeof(T) > total - offset) {
+			return 0;
+		}
+		T value = 0;
+		std::memcpy(&value, base + offset, sizeof(T));
+		return value;
 	}
-	T value = 0;
-	std::memcpy(&value, base + offset, sizeof(T));
-	return value;
-}
 
 } // namespace
 

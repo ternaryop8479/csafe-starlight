@@ -211,7 +211,7 @@ bool Model::save_to_file(const std::string &path) const {
 	content.append(reinterpret_cast<const char *>(&lgbm_len), sizeof(lgbm_len));
 	content.append(lgbm_model_.model_string);
 
-	// 追加白签名表节(V3B格式): 长度前缀 + 表序列化字节
+	// 追加白签名表节，长度前缀 + 表序列化字节
 	const std::string sigtab_data = sig_table_.serialize();
 	const uint64_t sigtab_len = static_cast<uint64_t>(sigtab_data.size());
 	content.append(reinterpret_cast<const char *>(&sigtab_len), sizeof(sigtab_len));
@@ -292,7 +292,7 @@ bool Model::load_from_file(const std::string &path) {
 	lgbm_model_.model_string.assign(reader.ptr, lgbm_len);
 	reader.ptr += lgbm_len;
 
-	// 白签名表节(V3B新增): 旧版模型可能没有该节, 剩余不足8字节时视为空表以兼容加载
+	// 白签名表节(剩余不足8字节，也就是没有这部分的时候视为空表)
 	if (reader.end - reader.ptr >= static_cast<std::ptrdiff_t>(sizeof(uint64_t))) {
 		uint64_t sigtab_len = 0;
 		if (!reader.get(sigtab_len)) {

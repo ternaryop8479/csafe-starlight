@@ -14,39 +14,39 @@ namespace starlight_v3::authenticode {
 
 namespace {
 
-// 序列化布局: count u32 + N × [pubkey_hash 32B | cn_len u16 | cn bytes]
-// 单条目固定34字节起步, 反序列化时以此做防御性计数校验
-constexpr size_t kEntryFixedSize = 32 + 2;
+	// 序列化布局: count u32 + N × [pubkey_hash 32B | cn_len u16 | cn bytes]
+	// 单条目固定34字节起步, 反序列化时以此做防御性计数校验
+	constexpr size_t kEntryFixedSize = 32 + 2;
 
-void put_u32(std::string &out, uint32_t value) {
-	char buf[4] = {};
-	std::memcpy(buf, &value, sizeof(buf));
-	out.append(buf, sizeof(buf));
-}
-
-void put_u16(std::string &out, uint16_t value) {
-	char buf[2] = {};
-	std::memcpy(buf, &value, sizeof(buf));
-	out.append(buf, sizeof(buf));
-}
-
-bool get_u32(const char *data, size_t size, size_t &offset, uint32_t &value) {
-	if (offset + 4 > size) {
-		return false;
+	void put_u32(std::string &out, uint32_t value) {
+		char buf[4] = {};
+		std::memcpy(buf, &value, sizeof(buf));
+		out.append(buf, sizeof(buf));
 	}
-	std::memcpy(&value, data + offset, 4);
-	offset += 4;
-	return true;
-}
 
-bool get_u16(const char *data, size_t size, size_t &offset, uint16_t &value) {
-	if (offset + 2 > size) {
-		return false;
+	void put_u16(std::string &out, uint16_t value) {
+		char buf[2] = {};
+		std::memcpy(buf, &value, sizeof(buf));
+		out.append(buf, sizeof(buf));
 	}
-	std::memcpy(&value, data + offset, 2);
-	offset += 2;
-	return true;
-}
+
+	bool get_u32(const char *data, size_t size, size_t &offset, uint32_t &value) {
+		if (offset + 4 > size) {
+			return false;
+		}
+		std::memcpy(&value, data + offset, 4);
+		offset += 4;
+		return true;
+	}
+
+	bool get_u16(const char *data, size_t size, size_t &offset, uint16_t &value) {
+		if (offset + 2 > size) {
+			return false;
+		}
+		std::memcpy(&value, data + offset, 2);
+		offset += 2;
+		return true;
+	}
 
 } // namespace
 

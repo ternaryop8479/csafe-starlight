@@ -8,8 +8,8 @@
 
 #include <algorithm>
 #include <array>
-#include <cstdint>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <vector>
@@ -20,39 +20,39 @@ namespace starlight_v3::pe {
 
 namespace {
 
-uint32_t read_u32(const uint8_t *data) {
-	uint32_t value = 0;
-	std::memcpy(&value, data, sizeof(value));
-	return value;
-}
+	uint32_t read_u32(const uint8_t *data) {
+		uint32_t value = 0;
+		std::memcpy(&value, data, sizeof(value));
+		return value;
+	}
 
-constexpr uint32_t kRich = 0x68636952; // "Rich"小端序
-constexpr uint32_t kDanS = 0x536e6144; // "DanS"小端序
+	constexpr uint32_t kRich = 0x68636952; // "Rich"小端序
+	constexpr uint32_t kDanS = 0x536e6144; // "DanS"小端序
 
-// 循环左移(校验和计算用)
-uint32_t rotate_left(uint32_t value, uint32_t bits) {
-	bits &= 31;
-	return bits == 0 ? value : (value << bits) | (value >> (32 - bits));
-}
+	// 循环左移(校验和计算用)
+	uint32_t rotate_left(uint32_t value, uint32_t bits) {
+		bits &= 31;
+		return bits == 0 ? value : (value << bits) | (value >> (32 - bits));
+	}
 
-// 复算Rich Header校验和: DanS起始偏移 + DOS头各字节按下标循环左移 + 各条目按其计数循环左移
-// 链接器把该值同时用作异或密钥, 故校验和与密钥相等即结构完整
-// 注意: e_lfanew(0x3c~0x40)在计算时视为0, 因为写入Rich块时该字段尚未确定
-uint32_t rich_checksum(const uint8_t *data, size_t dans_offset, size_t rich_offset, uint32_t key) {
-	uint32_t checksum = static_cast<uint32_t>(dans_offset);
-	for (size_t i = 0; i < dans_offset; ++i) {
-		if (i >= 0x3c && i < 0x40) {
-			continue;
+	// 复算Rich Header校验和: DanS起始偏移 + DOS头各字节按下标循环左移 + 各条目按其计数循环左移
+	// 链接器把该值同时用作异或密钥, 故校验和与密钥相等即结构完整
+	// 注意: e_lfanew(0x3c~0x40)在计算时视为0, 因为写入Rich块时该字段尚未确定
+	uint32_t rich_checksum(const uint8_t *data, size_t dans_offset, size_t rich_offset, uint32_t key) {
+		uint32_t checksum = static_cast<uint32_t>(dans_offset);
+		for (size_t i = 0; i < dans_offset; ++i) {
+			if (i >= 0x3c && i < 0x40) {
+				continue;
+			}
+			checksum += rotate_left(static_cast<uint32_t>(data[i]), static_cast<uint32_t>(i & 0x1f));
 		}
-		checksum += rotate_left(static_cast<uint32_t>(data[i]), static_cast<uint32_t>(i & 0x1f));
+		for (size_t offset = dans_offset + 16; offset + 8 <= rich_offset; offset += 8) {
+			const uint32_t product_build = read_u32(data + offset) ^ key;
+			const uint32_t count = read_u32(data + offset + 4) ^ key;
+			checksum += rotate_left(product_build, count & 0x1f);
+		}
+		return checksum;
 	}
-	for (size_t offset = dans_offset + 16; offset + 8 <= rich_offset; offset += 8) {
-		const uint32_t product_build = read_u32(data + offset) ^ key;
-		const uint32_t count = read_u32(data + offset + 4) ^ key;
-		checksum += rotate_left(product_build, count & 0x1f);
-	}
-	return checksum;
-}
 
 } // namespace
 
@@ -125,12 +125,14 @@ RichHeaderFeatPack extract_rich_header_feats(const PeView &view) {
 			builds[build] = true;
 			distinct_build_count += 1.0;
 		}
-		if (product != 0 && product < 0x1000) ++known_products;
+		if (product != 0 && product < 0x1000)
+			++known_products;
 		feats.total_count += static_cast<double>(count);
 		build_sum += build;
 		build_sq_sum += static_cast<double>(build) * build;
 		// BuildId为0的条目是链接器记录的导入函数计数, 不代表编译器产物
-		if (build == 0) zero_build_count += 1.0;
+		if (build == 0)
+			zero_build_count += 1.0;
 		feats.max_entry_count = std::max(feats.max_entry_count, static_cast<double>(count));
 		min_build = std::min<uint32_t>(min_build, build);
 		max_build = std::max<uint32_t>(max_build, build);
@@ -163,7 +165,8 @@ RichHeaderFeatPack extract_rich_header_feats(const PeView &view) {
 	if (entry_count > 0.0 && feats.total_count > 0.0) {
 		for (size_t offset = dans_offset + 16; offset < rich_offset; offset += 8) {
 			const double p = static_cast<double>(read_u32(data + offset + 4) ^ key) / feats.total_count;
-			if (p > 0.0) feats.count_entropy -= p * std::log2(p);
+			if (p > 0.0)
+				feats.count_entropy -= p * std::log2(p);
 		}
 	}
 	feats.present_without_debug = view.data_dir(6).size == 0 ? 1.0 : 0.0;

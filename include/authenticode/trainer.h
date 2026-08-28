@@ -14,8 +14,8 @@
 #include <string>
 #include <unordered_map>
 
-#include "basic/types.h"
 #include "authenticode/model.h"
+#include "basic/types.h"
 #include "pe/authenticode.h"
 
 namespace starlight_v3::authenticode {
