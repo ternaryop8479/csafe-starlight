@@ -17,7 +17,7 @@
 namespace {
 
 // 模型文件的魔数(自适应长度: 以'\0'结尾, 读取时按strlen取实际长度, 后续魔数变长无需改读取逻辑)
-constexpr char MODEL_MAGIC[] = { 'C', 'S', 'T', 'A', 'R', 'L', '3', 'A', '\0' };
+constexpr char MODEL_MAGIC[] = { 'C', 'S', 'T', 'A', 'R', 'L', '3', 'B', '\0' };
 
 // 二进制写缓冲, 所有写入均使用固定宽度类型(uint32_t/uint64_t/double)
 class BufferWriter {
