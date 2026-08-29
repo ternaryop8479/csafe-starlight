@@ -785,7 +785,6 @@ PEFeatPack extract_pe_feats(const pe::PeView &view, BlockEntropyFeatPack *block_
 	feats.has_symbol_table = file_header.PointerToSymbolTable != 0;
 	feats.size_of_optional_header = file_header.SizeOfOptionalHeader;
 	feats.file_characteristics = file_header.Characteristics;
-	feats.is_dll = (file_header.Characteristics & 0x2000) != 0;
 
 	OptView opt = make_opt_view(pe->peHeader);
 	if (opt.valid) {

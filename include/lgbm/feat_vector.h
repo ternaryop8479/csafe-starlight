@@ -17,14 +17,14 @@ namespace starlight_v3::lgbm {
 // 各特征组的维度(与feat_pack.h中的结构体字段一一对应)
 constexpr SIZE_T kEfgFeatDims = 36; ///< EFG结构及边信息特征维度(EFGFeatPack)
 constexpr SIZE_T kTspmFeatDims = 35; ///< tosSPM推理结果特征维度(TSPMFeatPack)
-constexpr SIZE_T kPeFeatDims = 91; ///< PE静态特征维度(PEFeatPack，含CLR与壳指纹)
+constexpr SIZE_T kPeFeatDims = 90; ///< PE静态特征维度(PEFeatPack，含CLR与壳指纹)
 constexpr SIZE_T kBlockEntropyFeatDims = 16; ///< 文件分块熵特征维度(BlockEntropyFeatPack)
 constexpr SIZE_T kSigFeatDims = 2; ///< 白签名置信度特征维度(SigFeatPack)
 constexpr SIZE_T kRichHeaderFeatDims = 22; ///< Rich Header编译器指纹特征维度(RichHeaderFeatPack)
 constexpr SIZE_T kDotnetFeatDims = 62; ///< CLR与.NET元数据特征维度(DotnetFeatPack)
 constexpr SIZE_T kIatFeatDims = 8; ///< IAT/导入目录结构特征维度(IatFeatPack)
 constexpr SIZE_T kCapabilityFeatDims = 12; ///< 导入API能力类别特征维度(CapabilityFeatPack)
-constexpr SIZE_T kTotalFeatDims = 284; ///< 总特征维度(36 + 35 + 91 + 16 + 2 + 22 + 62 + 8 + 12)
+constexpr SIZE_T kTotalFeatDims = 283; ///< 总特征维度(36 + 35 + 90 + 16 + 2 + 22 + 62 + 8 + 12)
 
 /**
  * @brief 将FeatPack按固定顺序序列化为double特征向量

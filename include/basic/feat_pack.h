@@ -128,7 +128,6 @@ struct PEFeatPack {
 	bool has_symbol_table; ///< 是否带COFF符号表
 	SIZE_T size_of_optional_header; ///< 可选头大小
 	SIZE_T file_characteristics; ///< 文件特征值(Characteristics)
-	bool is_dll; ///< 是否为DLL文件
 	double linker_version; ///< 链接器版本号(major * 100 + minor)
 	SIZE_T size_of_code; ///< 代码段大小
 	SIZE_T size_of_initialized_data; ///< 已初始化数据大小
@@ -229,7 +228,7 @@ struct PEFeatPack {
 	SIZE_T packer_section_count; ///< 命中已知壳节名前缀的节段数(综合信号)
 
 	// 结构体字段数, 与feat_vector.cpp中PE_FEAT_FIELDS宏的维度数编译期对齐, 防止字段遗漏
-	static constexpr SIZE_T kFieldCount = 91;
+	static constexpr SIZE_T kFieldCount = 90;
 };
 
 /**

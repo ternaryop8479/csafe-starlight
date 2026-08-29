@@ -91,7 +91,6 @@
 	X(has_symbol_table)             \
 	X(size_of_optional_header)      \
 	X(file_characteristics)         \
-	X(is_dll)                       \
 	X(linker_version)               \
 	X(size_of_code)                 \
 	X(size_of_initialized_data)     \
@@ -351,7 +350,7 @@ SIZE_T serialize_feat_pack(const FeatPack &feats, double *out) {
 	TSPM_FEAT_FIELDS(EMIT_TSPM_FIELD)
 #undef EMIT_TSPM_FIELD
 
-	// 再序列化PE特征(91维)
+	// 再序列化PE特征(90维)
 #define EMIT_PE_FIELD(name) *out++ = static_cast<double>(feats.pe_feats.name);
 	PE_FEAT_FIELDS(EMIT_PE_FIELD)
 #undef EMIT_PE_FIELD
