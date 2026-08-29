@@ -336,6 +336,23 @@ bool load_train_config(const std::string &config_path, starlight_v3::TrainConfig
 					std::string v = value_str;
 					std::transform(v.begin(), v.end(), v.begin(), ::tolower);
 					config.lgbm_config.is_unbalance = (v == "1" || v == "true" || v == "on" || v == "yes");
+				} else if (field == "lambda_l1") {
+					config.lgbm_config.lambda_l1 = std::stod(value_str);
+				} else if (field == "max_depth") {
+					config.lgbm_config.max_depth = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				} else if (field == "min_gain_to_split") {
+					config.lgbm_config.min_gain_to_split = std::stod(value_str);
+				} else if (field == "min_sum_hessian_in_leaf") {
+					config.lgbm_config.min_sum_hessian_in_leaf = std::stod(value_str);
+				} else if (field == "max_bin") {
+					config.lgbm_config.max_bin = static_cast<starlight_v3::SIZE_T>(std::stoull(value_str));
+				} else if (field == "deterministic") {
+					// 布尔值: 支持 1/0/true/false/on/off/yes/no
+					std::string v = value_str;
+					std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+					config.lgbm_config.deterministic = (v == "1" || v == "true" || v == "on" || v == "yes");
+				} else if (field == "verbosity") {
+					config.lgbm_config.verbosity = static_cast<int>(std::stoi(value_str));
 				} else {
 					std::cerr << "[Error] " << config_path << ":" << line_num << " 未知lgbm字段: " << field << std::endl;
 					return false;

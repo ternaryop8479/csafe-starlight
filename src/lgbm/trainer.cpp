@@ -29,6 +29,15 @@ std::string build_lgbm_params(const starlight_v3::lgbm::LGBMConfig &config) {
 	params += "bagging_fraction=" + std::to_string(config.bagging_fraction) + " ";
 	params += "bagging_freq=" + std::to_string(config.bagging_freq) + " ";
 	params += "lambda_l2=" + std::to_string(config.lambda_l2) + " ";
+	params += "lambda_l1=" + std::to_string(config.lambda_l1) + " ";
+	params += "max_depth=" + std::to_string(config.max_depth) + " ";
+	params += "min_gain_to_split=" + std::to_string(config.min_gain_to_split) + " ";
+	params += "min_sum_hessian_in_leaf=" + std::to_string(config.min_sum_hessian_in_leaf) + " ";
+	params += "max_bin=" + std::to_string(config.max_bin) + " ";
+	if (config.deterministic) {
+		params += "deterministic=true ";
+	}
+	params += "verbosity=" + std::to_string(config.verbosity) + " ";
 	// 类别不平衡时自动按反类样本比例加权, 避免多数类主导损失函数
 	if (config.is_unbalance) {
 		params += "is_unbalance=true ";
@@ -96,7 +105,8 @@ Model Trainer::train(const double *feature_matrix, int32_t nrows, int32_t ncols,
 	// 注意: 本版本LGBM_DatasetCreateFromMat的签名没有label参数, 标签必须通过LGBM_DatasetSetField单独设置
 	// (且label仅支持C_API_DTYPE_FLOAT32, 见c_api.h中LGBM_DatasetSetField的说明)
 	detail::DatasetHandleGuard train_dataset, valid_dataset;
-	detail::check_lgbm_status(LGBM_DatasetCreateFromMat(train_matrix.data(), C_API_DTYPE_FLOAT64, train_nrows, ncols, 1, "max_bin=255 force_row_wise=true", nullptr, &train_dataset.handle));
+	std::string dataset_params = "max_bin=" + std::to_string(config.max_bin) + " force_row_wise=true";
+	detail::check_lgbm_status(LGBM_DatasetCreateFromMat(train_matrix.data(), C_API_DTYPE_FLOAT64, train_nrows, ncols, 1, dataset_params.c_str(), nullptr, &train_dataset.handle));
 	detail::check_lgbm_status(LGBM_DatasetSetField(train_dataset.handle, "label", train_labels.data(), train_nrows, C_API_DTYPE_FLOAT32));
 	if (has_valid) {
 		const int32_t valid_nrows = static_cast<int32_t>(valid_indices.size());
@@ -109,7 +119,7 @@ Model Trainer::train(const double *feature_matrix, int32_t nrows, int32_t ncols,
 		}
 		// 验证集必须引用训练集构造(reference参数), 使两者共享同一套bin mapper,
 		// 否则LGBM_BoosterAddValidData会因bin mapper不一致而失败
-		detail::check_lgbm_status(LGBM_DatasetCreateFromMat(valid_matrix.data(), C_API_DTYPE_FLOAT64, valid_nrows, ncols, 1, "max_bin=255 force_row_wise=true", train_dataset.handle, &valid_dataset.handle));
+		detail::check_lgbm_status(LGBM_DatasetCreateFromMat(valid_matrix.data(), C_API_DTYPE_FLOAT64, valid_nrows, ncols, 1, dataset_params.c_str(), train_dataset.handle, &valid_dataset.handle));
 		detail::check_lgbm_status(LGBM_DatasetSetField(valid_dataset.handle, "label", valid_labels.data(), valid_nrows, C_API_DTYPE_FLOAT32));
 	}
 

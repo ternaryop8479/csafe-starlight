@@ -33,6 +33,13 @@ struct LGBMConfig {
 	unsigned int random_seed; ///< 验证集划分的随机种子, 固定后可复现训练结果
 	SIZE_T thread_count; ///< LightGBM训练线程数, 值域[0, +∞)。0表示使用系统最大并发数
 	bool is_unbalance; ///< 类别不平衡处理, true时启用is_unbalance(自动按反类样本比例加权)。黑/白样本比例越悬殊(如4:1)越应开启, 接近1:1时开启无益
+	double lambda_l1; ///< L1正则化系数, 值域[0, +∞)。对稀疏特征做自动特征选择, 压缩无用权重到0
+	SIZE_T max_depth; ///< 树最大深度限制, 值域[1, +∞), 0表示不限制。防止稀疏特征建立深分支过拟合
+	double min_gain_to_split; ///< 分裂最小增益门槛, 值域[0, +∞)。过滤稀疏特征低增益分裂
+	double min_sum_hessian_in_leaf; ///< 叶子最小海森和, 值域[0, +∞)。稀疏特征Hessian小, 提高此值可拦截噪声分裂
+	SIZE_T max_bin; ///< 直方图最大分箱数, 值域[2, +∞)。默认255, 降低可加快训练并粗化分裂点
+	bool deterministic; ///< 强制确定性训练, true时禁用多线程竞争导致的非确定性
+	int verbosity; ///< LightGBM日志级别, -1=静默, 0=警告, 1=信息, >1=调试
 };
 
 /**
